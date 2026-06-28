@@ -110,6 +110,13 @@
           <label><input id="missSoundToggle" type="checkbox" checked> ミス</label>
         </section>
 
+        <section class="control-block rhythm-block">
+          <div class="block-title">リズム</div>
+          <label><input id="rhythmToggle" type="checkbox"> リズム加点</label>
+          <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="240" step="1" value="100"></label>
+          <div id="rhythmStatus" class="small-text">拍に合うと加点</div>
+        </section>
+
         <section class="control-block backlog-block">
           <div class="block-title">保留項目</div>
           <ul class="backlog-list">
@@ -119,7 +126,7 @@
             <li>問題別成績</li>
             <li>難易度別スコア補正</li>
             <li>正解表示時間設定</li>
-            <li>CSV/列形式インポート</li>
+          <li>CSV/列形式インポート</li>
           </ul>
         </section>
       </aside>
@@ -177,6 +184,20 @@
         <strong id="rankValue">-</strong>
         <b id="rankScore" class="rank-score-large">0</b>
         <span id="rankStars">---</span>
+      </section>
+
+      <section class="analysis-card">
+        <div class="card-head"><h2>分析</h2><span id="rhythmResult">リズム 0</span></div>
+        <div class="analysis-grid">
+          <div><span>平均打鍵</span><b id="resultKeyAverage">0ms</b></div>
+          <div><span>コメント</span><b id="analysisComment">待機中</b></div>
+        </div>
+        <div class="analysis-lists">
+          <p><span>速いキー</span><b id="fastKeys">-</b></p>
+          <p><span>遅いキー</span><b id="slowKeys">-</b></p>
+          <p><span>得意</span><b id="strongWords">-</b></p>
+          <p><span>不得意</span><b id="weakWords">-</b></p>
+        </div>
       </section>
 
       <section class="miss-card">

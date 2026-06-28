@@ -35,6 +35,9 @@ const els = {
   keySoundToggle: $("keySoundToggle"),
   correctSoundToggle: $("correctSoundToggle"),
   missSoundToggle: $("missSoundToggle"),
+  rhythmToggle: $("rhythmToggle"),
+  rhythmBpmInput: $("rhythmBpmInput"),
+  rhythmStatus: $("rhythmStatus"),
   timerValue: $("timerValue"),
   timerFill: $("timerFill"),
   countdownOverlay: $("countdownOverlay"),
@@ -57,6 +60,13 @@ const els = {
   rankValue: $("rankValue"),
   rankScore: $("rankScore"),
   rankStars: $("rankStars"),
+  rhythmResult: $("rhythmResult"),
+  resultKeyAverage: $("resultKeyAverage"),
+  analysisComment: $("analysisComment"),
+  fastKeys: $("fastKeys"),
+  slowKeys: $("slowKeys"),
+  strongWords: $("strongWords"),
+  weakWords: $("weakWords"),
   missSummary: $("missSummary"),
   missList: $("missList"),
   retryMissBtn: $("retryMissBtn"),
@@ -75,6 +85,7 @@ const state = {
   timerId: 0,
   countdownId: 0,
   transitionId: 0,
+  rhythmTimerId: 0,
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -118,6 +129,7 @@ els.answerInput.addEventListener("input", () => {
   checkAutoCorrect();
 });
 els.answerInput.addEventListener("keydown", (event) => {
+  recordKeydown(event);
   if (event.key === "Enter") {
     event.preventDefault();
     judgeCurrentAnswer();
@@ -135,7 +147,9 @@ els.answerInput.addEventListener("keydown", (event) => {
   els.soundToggle,
   els.keySoundToggle,
   els.correctSoundToggle,
-  els.missSoundToggle
+  els.missSoundToggle,
+  els.rhythmToggle,
+  els.rhythmBpmInput
 ].forEach((control) => {
   control.addEventListener("change", () => {
     if (control === els.commaModeSelect) {
@@ -146,6 +160,11 @@ els.answerInput.addEventListener("keydown", (event) => {
     updateAllStats();
     if (state.game && state.game.running && state.game.current) {
       startQuestionTimer();
+      if (control === els.rhythmToggle || control === els.rhythmBpmInput) {
+        state.game.rhythmEnabled = els.rhythmToggle.checked;
+        state.game.rhythmBpm = getRhythmBpm();
+        startRhythmLoop();
+      }
     }
   });
   control.addEventListener("input", persistSettings);
@@ -314,6 +333,14 @@ function startGame(options = {}) {
     questionStartTime: 0,
     totalAnswerMs: 0,
     correctChars: 0,
+    lastKeyTime: 0,
+    keyTimings: [],
+    keyStats: new Map(),
+    wordStats: new Map(),
+    rhythmEnabled: els.rhythmToggle.checked,
+    rhythmBpm: getRhythmBpm(),
+    rhythmScore: 0,
+    rhythmHits: { perfect: 0, good: 0, miss: 0 },
     panelCount,
     revealedPanels,
     attackLimitSeconds: gameType === "timeAttack" ? getAttackLimitSeconds() : 0,
@@ -356,6 +383,8 @@ function beginGameAfterCountdown() {
   if (!game) return;
   game.running = true;
   game.startTime = performance.now();
+  game.lastKeyTime = 0;
+  startRhythmLoop();
   if (game.gameType === "timeAttack") {
     game.attackEndTime = game.startTime + game.attackLimitSeconds * 1000;
     startTimeAttackTimer();
@@ -391,6 +420,7 @@ function nextQuestion() {
     game.current = game.questions[game.attemptsMade];
   }
   game.questionStartTime = performance.now();
+  game.lastKeyTime = 0;
   els.questionText.textContent = game.current.prompt;
   els.questionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
@@ -421,17 +451,39 @@ function judgeCurrentAnswer() {
   }
 }
 
+function recordKeydown(event) {
+  const game = state.game;
+  if (!game || !game.running || !game.current || event.isComposing) return;
+  if (event.key.length !== 1) return;
+  const now = performance.now();
+  if (game.lastKeyTime) {
+    const delta = now - game.lastKeyTime;
+    if (delta >= 20 && delta <= 5000) {
+      game.keyTimings.push(delta);
+      const key = event.key.toLowerCase();
+      const stat = game.keyStats.get(key) || { count: 0, totalMs: 0 };
+      stat.count += 1;
+      stat.totalMs += delta;
+      game.keyStats.set(key, stat);
+    }
+  }
+  game.lastKeyTime = now;
+  recordRhythmHit(game, now);
+}
+
 function correctCurrentQuestion() {
   const game = state.game;
   if (!game || !game.running || !game.current) return;
   if (game.gameType !== "timeAttack") {
     clearQuestionTimer();
   }
+  const answerMs = performance.now() - game.questionStartTime;
   game.correctCount += 1;
   game.attemptsMade += 1;
   game.questionCursor += 1;
-  game.totalAnswerMs += performance.now() - game.questionStartTime;
+  game.totalAnswerMs += answerMs;
   game.correctChars += game.current.answer.length;
+  recordWordResult(game, game.current, true, answerMs);
   revealNextPanel();
   playCorrectSound();
   setFeedback("正解！", "パネルが開きました", false);
@@ -450,6 +502,7 @@ function missCurrentQuestion(reason) {
   game.attemptsMade += 1;
   game.questionCursor += 1;
   game.missed.set(game.current.raw, game.current);
+  recordWordResult(game, game.current, false, performance.now() - game.questionStartTime);
   playMissSound();
   setInputsEnabled(false);
   setFeedback(`正解: ${game.current.answer}`, reason === "時間切れ" ? "時間切れ" : "不正解", true);
@@ -577,6 +630,7 @@ function finishGame(aborted) {
   clearQuestionTimer();
   clearCountdown();
   clearTransitionTimer();
+  stopRhythmLoop();
   game.running = false;
   game.finished = true;
   game.finishedAt = performance.now();
@@ -638,6 +692,10 @@ function calculateStats(game) {
   const cpm = game.correctChars / minutes;
   const wpm = cpm / 5;
   const speedBonusRate = getSpeedBonusRate(averageSeconds);
+  const rhythmScore = game.rhythmScore || 0;
+  const avgKeyMs = getAverage(game.keyTimings || []);
+  const keyAnalysis = buildKeyAnalysis(game.keyStats);
+  const wordAnalysis = buildWordAnalysis(game.wordStats);
   if (game.gameType === "timeAttack") {
     const attackMinutes = Math.max((game.attackLimitSeconds || totalSeconds || 60) / 60, 1 / 60);
     const correctPerMinute = game.correctCount / attackMinutes;
@@ -648,13 +706,15 @@ function calculateStats(game) {
       densityRate * 550 +
       accuracyRate * 250 +
       speedBonusRate * 250 -
-      missPenalty
+      missPenalty +
+      rhythmScore
     ));
     const scoreRate = clamp(
       densityRate * 50 +
       accuracyRate * 30 +
       speedBonusRate * 20 -
-      game.missCount * 2,
+      game.missCount * 2 +
+      Math.min(8, rhythmScore / 35),
       0,
       100
     );
@@ -668,6 +728,11 @@ function calculateStats(game) {
       cpm,
       score,
       scoreRate,
+      rhythmScore,
+      avgKeyMs,
+      keyAnalysis,
+      wordAnalysis,
+      comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
       rank: getRank(scoreRate)
     };
   }
@@ -678,13 +743,15 @@ function calculateStats(game) {
     700 * completionRate +
     250 * accuracyRate +
     350 * speedBonusRate * completionRate -
-    missPenalty
+    missPenalty +
+    rhythmScore
   ));
   const scoreRate = clamp(
     completionRate * 58 +
     accuracyRate * 22 +
     speedBonusRate * 20 * completionRate -
-    game.missCount * 2,
+    game.missCount * 2 +
+    Math.min(8, rhythmScore / 35),
     0,
     100
   );
@@ -698,12 +765,33 @@ function calculateStats(game) {
     cpm,
     score,
     scoreRate,
+    rhythmScore,
+    avgKeyMs,
+    keyAnalysis,
+    wordAnalysis,
+    comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
     rank: getRank(scoreRate)
   };
 }
 
 function blankStats() {
-  return { correctCount: 0, missCount: 0, accuracy: 0, totalSeconds: 0, averageSeconds: 0, wpm: 0, cpm: 0, score: 0, scoreRate: 0, rank: "-" };
+  return {
+    correctCount: 0,
+    missCount: 0,
+    accuracy: 0,
+    totalSeconds: 0,
+    averageSeconds: 0,
+    wpm: 0,
+    cpm: 0,
+    score: 0,
+    scoreRate: 0,
+    rhythmScore: 0,
+    avgKeyMs: 0,
+    keyAnalysis: { fast: [], slow: [] },
+    wordAnalysis: { strong: [], weak: [] },
+    comment: "待機中",
+    rank: "-"
+  };
 }
 
 function updateResultView(stats) {
@@ -719,6 +807,13 @@ function updateResultView(stats) {
   els.rankScore.textContent = formatNumber(stats.score);
   els.rankStars.textContent = getStars(stats.rank);
   els.rankValue.closest(".rank-card").className = `rank-card rank-${String(stats.rank).toLowerCase()}`;
+  els.rhythmResult.textContent = `リズム ${formatNumber(stats.rhythmScore)}`;
+  els.resultKeyAverage.textContent = stats.avgKeyMs ? `${Math.round(stats.avgKeyMs)}ms` : "0ms";
+  els.analysisComment.textContent = stats.comment;
+  els.fastKeys.textContent = formatKeyList(stats.keyAnalysis.fast);
+  els.slowKeys.textContent = formatKeyList(stats.keyAnalysis.slow);
+  els.strongWords.textContent = formatWordList(stats.wordAnalysis.strong);
+  els.weakWords.textContent = formatWordList(stats.wordAnalysis.weak);
 }
 
 function renderProgress(total, done) {
@@ -744,6 +839,65 @@ function renderMissList(items) {
   els.retryMissBtn.disabled = !hasMisses;
   els.copyMissBtn.disabled = !hasMisses;
   els.saveMissBtn.disabled = !hasMisses;
+}
+
+function recordWordResult(game, question, correct, answerMs) {
+  const key = question.raw || question.answer;
+  const stat = game.wordStats.get(key) || {
+    label: question.answer || question.prompt,
+    attempts: 0,
+    correct: 0,
+    miss: 0,
+    totalMs: 0
+  };
+  stat.attempts += 1;
+  stat.correct += correct ? 1 : 0;
+  stat.miss += correct ? 0 : 1;
+  stat.totalMs += Math.max(0, answerMs || 0);
+  game.wordStats.set(key, stat);
+}
+
+function buildKeyAnalysis(keyStats) {
+  const items = Array.from((keyStats || new Map()).entries())
+    .filter(([, stat]) => stat.count >= 1)
+    .map(([key, stat]) => ({
+      label: key === " " ? "Space" : key,
+      averageMs: stat.totalMs / stat.count,
+      count: stat.count
+    }));
+  return {
+    fast: [...items].sort((a, b) => a.averageMs - b.averageMs).slice(0, 3),
+    slow: [...items].sort((a, b) => b.averageMs - a.averageMs).slice(0, 3)
+  };
+}
+
+function buildWordAnalysis(wordStats) {
+  const items = Array.from((wordStats || new Map()).values())
+    .map((stat) => ({
+      label: stat.label,
+      attempts: stat.attempts,
+      accuracy: stat.attempts ? stat.correct / stat.attempts : 0,
+      averageMs: stat.correct ? stat.totalMs / Math.max(1, stat.correct) : Infinity,
+      miss: stat.miss
+    }));
+  return {
+    strong: [...items]
+      .filter((item) => item.accuracy > 0)
+      .sort((a, b) => b.accuracy - a.accuracy || a.averageMs - b.averageMs)
+      .slice(0, 3),
+    weak: [...items]
+      .sort((a, b) => b.miss - a.miss || a.accuracy - b.accuracy || b.averageMs - a.averageMs)
+      .slice(0, 3)
+  };
+}
+
+function buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore) {
+  if (!accuracyRate && !averageSeconds && !avgKeyMs) return "待機中";
+  if (accuracyRate >= 0.95 && averageSeconds <= 3) return rhythmScore ? "正確で速い。リズムも良好です。" : "正確で速いです。";
+  if (accuracyRate < 0.75) return "正確さを優先すると伸びます。";
+  if (averageSeconds >= 6) return "正確です。次はテンポを上げましょう。";
+  if (avgKeyMs >= 650) return "打鍵間隔が広めです。苦手キーを確認しましょう。";
+  return "安定しています。弱点ワードを重点練習しましょう。";
 }
 
 function retryMissQuestions() {
@@ -917,6 +1071,53 @@ function clearTransitionTimer() {
   }
 }
 
+function startRhythmLoop() {
+  stopRhythmLoop();
+  const game = state.game;
+  if (!game || !game.running || !game.rhythmEnabled) {
+    els.rhythmStatus.textContent = els.rhythmToggle.checked ? "開始後に鳴ります" : "拍に合うと加点";
+    return;
+  }
+  const interval = 60000 / game.rhythmBpm;
+  els.rhythmStatus.textContent = `${game.rhythmBpm} BPM`;
+  playRhythmClick(true);
+  state.rhythmTimerId = window.setInterval(() => {
+    if (!state.game || state.game !== game || !game.running || !game.rhythmEnabled) {
+      stopRhythmLoop();
+      return;
+    }
+    playRhythmClick(false);
+  }, interval);
+}
+
+function stopRhythmLoop() {
+  if (state.rhythmTimerId) {
+    window.clearInterval(state.rhythmTimerId);
+    state.rhythmTimerId = 0;
+  }
+}
+
+function recordRhythmHit(game, now) {
+  if (!game.rhythmEnabled || !game.startTime) return;
+  const beatMs = 60000 / game.rhythmBpm;
+  const elapsed = Math.max(0, now - game.startTime);
+  const offset = Math.abs(((elapsed + beatMs / 2) % beatMs) - beatMs / 2);
+  const perfectWindow = beatMs * 0.12;
+  const goodWindow = beatMs * 0.24;
+  if (offset <= perfectWindow) {
+    game.rhythmScore += 12;
+    game.rhythmHits.perfect += 1;
+    els.rhythmStatus.textContent = `Perfect +12 (${Math.round(offset)}ms)`;
+  } else if (offset <= goodWindow) {
+    game.rhythmScore += 6;
+    game.rhythmHits.good += 1;
+    els.rhythmStatus.textContent = `Good +6 (${Math.round(offset)}ms)`;
+  } else {
+    game.rhythmHits.miss += 1;
+    els.rhythmStatus.textContent = `ずれ ${Math.round(offset)}ms`;
+  }
+}
+
 function persistSettings() {
   state.settings = {
     selectedFile: els.fileSelect.value,
@@ -931,6 +1132,8 @@ function persistSettings() {
     keySound: els.keySoundToggle.checked,
     correctSound: els.correctSoundToggle.checked,
     missSound: els.missSoundToggle.checked,
+    rhythm: els.rhythmToggle.checked,
+    rhythmBpm: els.rhythmBpmInput.value,
     imageName: state.imageName
   };
   localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
@@ -949,6 +1152,8 @@ function applySettings() {
   els.keySoundToggle.checked = settings.keySound !== false;
   els.correctSoundToggle.checked = settings.correctSound !== false;
   els.missSoundToggle.checked = settings.missSound !== false;
+  els.rhythmToggle.checked = Boolean(settings.rhythm);
+  els.rhythmBpmInput.value = settings.rhythmBpm || "100";
   els.imageFileName.textContent = settings.imageName ? `${settings.imageName} (再選択してください)` : "未選択";
 }
 
@@ -978,6 +1183,11 @@ function playCancelSound() {
   if (!els.soundToggle.checked) return;
   playTone(320, 0.08, "triangle", 0.22, 0);
   playTone(210, 0.12, "triangle", 0.18, 0.07);
+}
+
+function playRhythmClick(accent) {
+  if (!els.soundToggle.checked) return;
+  playTone(accent ? 980 : 720, 0.025, "square", accent ? 0.16 : 0.1, 0);
 }
 
 function playTone(frequency, duration, type, gainScale, delay = 0) {
@@ -1024,8 +1234,26 @@ function getSpeedBonusRate(averageSeconds) {
   return clamp((6 - averageSeconds) / 4.5, 0, 1);
 }
 
+function getRhythmBpm() {
+  return clamp(Math.floor(Number(els.rhythmBpmInput.value) || 100), 40, 240);
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function getAverage(values) {
+  return values && values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function formatKeyList(items) {
+  if (!items || !items.length) return "-";
+  return items.map((item) => `${item.label}:${Math.round(item.averageMs)}ms`).join(" / ");
+}
+
+function formatWordList(items) {
+  if (!items || !items.length) return "-";
+  return items.map((item) => item.label).join(" / ");
 }
 
 function formatDuration(seconds) {
