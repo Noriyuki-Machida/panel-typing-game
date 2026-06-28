@@ -108,7 +108,10 @@ els.fileSelect.addEventListener("change", () => {
 els.loadPasteBtn.addEventListener("click", handlePasteLoad);
 els.imageInput.addEventListener("change", handleImageInput);
 els.resetPuzzleBtn.addEventListener("click", resetPuzzle);
-els.startBtn.addEventListener("click", () => startGame());
+els.startBtn.addEventListener("click", () => {
+  unlockAudio();
+  startGame();
+});
 els.abortBtn.addEventListener("click", abortGame);
 els.judgeBtn.addEventListener("click", judgeCurrentAnswer);
 els.skipBtn.addEventListener("click", () => missCurrentQuestion("ミス"));
@@ -158,6 +161,13 @@ els.answerInput.addEventListener("keydown", (event) => {
     persistSettings();
     updateTimeLimitControls();
     updateAllStats();
+    if (control === els.soundToggle || control === els.rhythmToggle) {
+      unlockAudio();
+    }
+    if (control === els.rhythmToggle) {
+      if (els.rhythmToggle.checked) playRhythmClick(true);
+      els.rhythmStatus.textContent = els.rhythmToggle.checked ? `${getRhythmBpm()} BPM / 開始後に鳴ります` : "拍に合うと加点";
+    }
     if (state.game && state.game.running && state.game.current) {
       startQuestionTimer();
       if (control === els.rhythmToggle || control === els.rhythmBpmInput) {
@@ -1078,6 +1088,7 @@ function startRhythmLoop() {
     els.rhythmStatus.textContent = els.rhythmToggle.checked ? "開始後に鳴ります" : "拍に合うと加点";
     return;
   }
+  unlockAudio();
   const interval = 60000 / game.rhythmBpm;
   els.rhythmStatus.textContent = `${game.rhythmBpm} BPM`;
   playRhythmClick(true);
@@ -1187,14 +1198,22 @@ function playCancelSound() {
 
 function playRhythmClick(accent) {
   if (!els.soundToggle.checked) return;
-  playTone(accent ? 980 : 720, 0.025, "square", accent ? 0.16 : 0.1, 0);
+  playTone(accent ? 1200 : 820, 0.055, "square", accent ? 0.34 : 0.24, 0);
+}
+
+function unlockAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!state.audioContext) state.audioContext = new AudioContextClass();
+  if (state.audioContext.state === "suspended") {
+    state.audioContext.resume().catch(() => {});
+  }
+  return state.audioContext;
 }
 
 function playTone(frequency, duration, type, gainScale, delay = 0) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-  if (!state.audioContext) state.audioContext = new AudioContextClass();
-  const ctx = state.audioContext;
+  const ctx = unlockAudio();
+  if (!ctx) return;
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
   const start = ctx.currentTime + delay;
