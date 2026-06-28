@@ -335,6 +335,24 @@ input[type="number"] {
   font-weight: 800;
 }
 
+.rhythm-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.rhythm-row label {
+  margin-top: 0;
+}
+
+.rhythm-row label:last-child {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
 .rhythm-block input[type="number"] {
   height: 30px;
 }

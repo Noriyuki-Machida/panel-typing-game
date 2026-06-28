@@ -112,8 +112,10 @@
 
         <section class="control-block rhythm-block">
           <div class="block-title">リズム</div>
-          <label><input id="rhythmToggle" type="checkbox"> リズム加点</label>
-          <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="240" step="1" value="100"></label>
+          <div class="rhythm-row">
+            <label><input id="rhythmToggle" type="checkbox"> 加点</label>
+            <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="240" step="1" value="100"></label>
+          </div>
           <div id="rhythmStatus" class="small-text">拍に合うと加点</div>
         </section>
 
