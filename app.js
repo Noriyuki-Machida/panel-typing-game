@@ -38,6 +38,8 @@ const els = {
   rhythmToggle: $("rhythmToggle"),
   rhythmBpmInput: $("rhythmBpmInput"),
   rhythmStatus: $("rhythmStatus"),
+  demoToggle: $("demoToggle"),
+  demoStatus: $("demoStatus"),
   timerValue: $("timerValue"),
   timerFill: $("timerFill"),
   countdownOverlay: $("countdownOverlay"),
@@ -86,6 +88,7 @@ const state = {
   countdownId: 0,
   transitionId: 0,
   rhythmTimerId: 0,
+  demoTimerId: 0,
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -152,7 +155,8 @@ els.answerInput.addEventListener("keydown", (event) => {
   els.correctSoundToggle,
   els.missSoundToggle,
   els.rhythmToggle,
-  els.rhythmBpmInput
+  els.rhythmBpmInput,
+  els.demoToggle
 ].forEach((control) => {
   control.addEventListener("change", () => {
     if (control === els.commaModeSelect) {
@@ -167,6 +171,17 @@ els.answerInput.addEventListener("keydown", (event) => {
     if (control === els.rhythmToggle) {
       if (els.rhythmToggle.checked) playRhythmClick(true);
       els.rhythmStatus.textContent = els.rhythmToggle.checked ? `${getRhythmBpm()} BPM / 開始後に鳴ります` : "拍に合うと加点";
+    }
+    if (control === els.demoToggle) {
+      els.demoStatus.textContent = els.demoToggle.checked ? "開始後に自動入力します" : "制限時間の80%で入力";
+      if (state.game && state.game.running && state.game.current) {
+        state.game.demoEnabled = els.demoToggle.checked;
+        if (state.game.demoEnabled) {
+          startDemoTyping();
+        } else {
+          clearDemoTimer();
+        }
+      }
     }
     if (state.game && state.game.running && state.game.current) {
       startQuestionTimer();
@@ -313,6 +328,7 @@ function startGame(options = {}) {
   clearQuestionTimer();
   clearCountdown();
   clearTransitionTimer();
+  clearDemoTimer();
   const pool = options.questions || getQuestionPool();
   if (!pool.length) {
     setFeedback("問題がありません", "フォルダ選択、または貼り付け読込をしてください", true);
@@ -351,6 +367,7 @@ function startGame(options = {}) {
     rhythmBpm: getRhythmBpm(),
     rhythmScore: 0,
     rhythmHits: { perfect: 0, good: 0, miss: 0 },
+    demoEnabled: els.demoToggle.checked,
     panelCount,
     revealedPanels,
     attackLimitSeconds: gameType === "timeAttack" ? getAttackLimitSeconds() : 0,
@@ -369,16 +386,19 @@ function runCountdown() {
   clearCountdown();
   let value = 3;
   els.countdownOverlay.classList.remove("hidden");
+  els.countdownOverlay.classList.remove("start-word");
   els.countdownOverlay.textContent = String(value);
   setFeedback("カウントダウン", "3秒後に開始", false);
 
   state.countdownId = window.setInterval(() => {
     value -= 1;
     if (value > 0) {
+      els.countdownOverlay.classList.remove("start-word");
       els.countdownOverlay.textContent = String(value);
       return;
     }
     if (value === 0) {
+      els.countdownOverlay.classList.add("start-word");
       els.countdownOverlay.textContent = "START";
       return;
     }
@@ -412,6 +432,7 @@ function chooseQuestions(pool, count) {
 function nextQuestion() {
   const game = state.game;
   if (!game || !game.running) return;
+  clearDemoTimer();
   if (game.gameType === "timeAttack" && performance.now() >= game.attackEndTime) {
     finishGame(false);
     return;
@@ -441,6 +462,7 @@ function nextQuestion() {
     startQuestionTimer();
   }
   updateAllStats();
+  startDemoTyping();
 }
 
 function checkAutoCorrect() {
@@ -465,16 +487,21 @@ function recordKeydown(event) {
   const game = state.game;
   if (!game || !game.running || !game.current || event.isComposing) return;
   if (event.key.length !== 1) return;
-  const now = performance.now();
+  recordTypedKey(event.key, performance.now());
+}
+
+function recordTypedKey(key, now) {
+  const game = state.game;
+  if (!game || !game.running || !game.current || key.length !== 1) return;
   if (game.lastKeyTime) {
     const delta = now - game.lastKeyTime;
     if (delta >= 20 && delta <= 5000) {
       game.keyTimings.push(delta);
-      const key = event.key.toLowerCase();
-      const stat = game.keyStats.get(key) || { count: 0, totalMs: 0 };
+      const normalizedKey = key.toLowerCase();
+      const stat = game.keyStats.get(normalizedKey) || { count: 0, totalMs: 0 };
       stat.count += 1;
       stat.totalMs += delta;
-      game.keyStats.set(key, stat);
+      game.keyStats.set(normalizedKey, stat);
     }
   }
   game.lastKeyTime = now;
@@ -484,6 +511,7 @@ function recordKeydown(event) {
 function correctCurrentQuestion() {
   const game = state.game;
   if (!game || !game.running || !game.current) return;
+  clearDemoTimer();
   if (game.gameType !== "timeAttack") {
     clearQuestionTimer();
   }
@@ -505,6 +533,7 @@ function correctCurrentQuestion() {
 function missCurrentQuestion(reason) {
   const game = state.game;
   if (!game || !game.running || !game.current) return;
+  clearDemoTimer();
   if (game.gameType !== "timeAttack") {
     clearQuestionTimer();
   }
@@ -640,6 +669,7 @@ function finishGame(aborted) {
   clearQuestionTimer();
   clearCountdown();
   clearTransitionTimer();
+  clearDemoTimer();
   stopRhythmLoop();
   game.running = false;
   game.finished = true;
@@ -1081,6 +1111,60 @@ function clearTransitionTimer() {
   }
 }
 
+function clearDemoTimer() {
+  if (state.demoTimerId) {
+    window.clearInterval(state.demoTimerId);
+    state.demoTimerId = 0;
+  }
+}
+
+function startDemoTyping() {
+  clearDemoTimer();
+  const game = state.game;
+  if (!game || !game.running || !game.current || !game.demoEnabled) {
+    els.demoStatus.textContent = els.demoToggle.checked ? "開始後に自動入力します" : "制限時間の80%で入力";
+    return;
+  }
+  const answer = game.current.answer || "";
+  if (!answer) return;
+  const durationMs = getDemoDurationMs(game, answer);
+  const stepMs = clamp(Math.floor(durationMs / Math.max(1, answer.length)), 45, 800);
+  els.demoStatus.textContent = `自動入力中 ${Math.round(durationMs / 1000 * 10) / 10}s`;
+  state.demoTimerId = window.setInterval(() => {
+    if (!state.game || state.game !== game || !game.running || !game.current || !game.demoEnabled) {
+      clearDemoTimer();
+      return;
+    }
+    const current = els.answerInput.value;
+    if (current === answer) {
+      clearDemoTimer();
+      checkAutoCorrect();
+      return;
+    }
+    if (!answer.startsWith(current)) {
+      clearDemoTimer();
+      els.demoStatus.textContent = "手入力を優先";
+      return;
+    }
+    const nextChar = answer.charAt(current.length);
+    els.answerInput.value = current + nextChar;
+    recordTypedKey(nextChar, performance.now());
+    playKeySound();
+    checkAutoCorrect();
+  }, stepMs);
+}
+
+function getDemoDurationMs(game, answer) {
+  if (game.gameType === "timeAttack") {
+    return Math.max(1200, answer.length * 140);
+  }
+  const limit = getTimeLimitSeconds();
+  if (limit) {
+    return Math.max(600, limit * 800);
+  }
+  return Math.max(1600, answer.length * 180);
+}
+
 function startRhythmLoop() {
   stopRhythmLoop();
   const game = state.game;
@@ -1145,6 +1229,7 @@ function persistSettings() {
     missSound: els.missSoundToggle.checked,
     rhythm: els.rhythmToggle.checked,
     rhythmBpm: els.rhythmBpmInput.value,
+    demo: els.demoToggle.checked,
     imageName: state.imageName
   };
   localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
@@ -1165,6 +1250,7 @@ function applySettings() {
   els.missSoundToggle.checked = settings.missSound !== false;
   els.rhythmToggle.checked = Boolean(settings.rhythm);
   els.rhythmBpmInput.value = settings.rhythmBpm || "100";
+  els.demoToggle.checked = Boolean(settings.demo);
   els.imageFileName.textContent = settings.imageName ? `${settings.imageName} (再選択してください)` : "未選択";
 }
 
