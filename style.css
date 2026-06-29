@@ -395,7 +395,7 @@ input[type="number"] {
   min-height: 0;
   padding: 10px;
   display: grid;
-  grid-template-rows: 36px minmax(176px, 1fr) 122px 66px;
+  grid-template-rows: 36px minmax(160px, 1fr) 152px 66px;
   gap: 8px;
 }
 
@@ -459,11 +459,32 @@ input[type="number"] {
 }
 
 #answerInput {
-  height: 62px;
+  height: 56px;
   margin-top: 8px;
   padding: 6px 12px;
   font-family: Consolas, "Courier New", monospace;
   font-size: clamp(30px, 4vw, 52px);
+}
+
+.input-mirror {
+  height: 30px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  border: 1px solid rgba(53, 67, 90, 0.7);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #dce7ff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 18px;
+  line-height: 20px;
+}
+
+.input-mirror:empty::before {
+  content: "入力追従";
+  color: rgba(170, 180, 198, 0.55);
 }
 
 .answer-actions {

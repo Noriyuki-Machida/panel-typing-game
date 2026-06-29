@@ -46,6 +46,7 @@ const els = {
   questionText: $("questionText"),
   questionSub: $("questionSub"),
   answerInput: $("answerInput"),
+  inputMirror: $("inputMirror"),
   judgeBtn: $("judgeBtn"),
   skipBtn: $("skipBtn"),
   feedbackText: $("feedbackText"),
@@ -128,9 +129,11 @@ els.answerInput.addEventListener("compositionstart", () => {
 });
 els.answerInput.addEventListener("compositionend", () => {
   state.composing = false;
+  updateInputMirror();
   checkAutoCorrect();
 });
 els.answerInput.addEventListener("input", () => {
+  updateInputMirror();
   playKeySound();
   checkAutoCorrect();
 });
@@ -455,6 +458,7 @@ function nextQuestion() {
   els.questionText.textContent = game.current.prompt;
   els.questionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
+  updateInputMirror();
   els.answerInput.focus();
   if (game.gameType === "timeAttack") {
     updateTimeAttackTimerReadout();
@@ -471,6 +475,15 @@ function checkAutoCorrect() {
   if (els.answerInput.value === game.current.answer) {
     correctCurrentQuestion();
   }
+}
+
+function updateInputMirror() {
+  if (!els.inputMirror) return;
+  els.inputMirror.textContent = els.answerInput.value || "";
+  window.requestAnimationFrame(() => {
+    els.inputMirror.scrollLeft = els.inputMirror.scrollWidth;
+    els.answerInput.scrollLeft = els.answerInput.scrollWidth;
+  });
 }
 
 function judgeCurrentAnswer() {
@@ -731,7 +744,8 @@ function calculateStats(game) {
   const minutes = Math.max(totalSeconds / 60, 1 / 60);
   const cpm = game.correctChars / minutes;
   const wpm = cpm / 5;
-  const speedBonusRate = getSpeedBonusRate(averageSeconds);
+  const secondsPerChar = game.correctChars ? game.totalAnswerMs / game.correctChars / 1000 : 0;
+  const speedPower = getSpeedPower(secondsPerChar, cpm);
   const rhythmScore = game.rhythmScore || 0;
   const avgKeyMs = getAverage(game.keyTimings || []);
   const keyAnalysis = buildKeyAnalysis(game.keyStats);
@@ -739,78 +753,63 @@ function calculateStats(game) {
   if (game.gameType === "timeAttack") {
     const attackMinutes = Math.max((game.attackLimitSeconds || totalSeconds || 60) / 60, 1 / 60);
     const correctPerMinute = game.correctCount / attackMinutes;
-    const densityRate = clamp(correctPerMinute / 24, 0, 1);
-    const missPenalty = game.missCount * 25;
+    const densityPower = Math.pow(clamp(correctPerMinute / 45, 0, 1), 1.7);
+    const missPenalty = game.missCount * 260;
+    const speedBonus = 7600 * accuracyRate * Math.max(speedPower, densityPower);
     const score = Math.max(0, Math.round(
-      game.correctCount * 45 +
-      densityRate * 550 +
-      accuracyRate * 250 +
-      speedBonusRate * 250 -
+      game.correctCount * 80 +
+      accuracyRate * 450 +
+      speedBonus -
       missPenalty +
       rhythmScore
     ));
-    const scoreRate = clamp(
-      densityRate * 50 +
-      accuracyRate * 30 +
-      speedBonusRate * 20 -
-      game.missCount * 2 +
-      Math.min(8, rhythmScore / 35),
-      0,
-      100
-    );
     return {
       correctCount: game.correctCount,
       missCount: game.missCount,
       accuracy,
       totalSeconds,
       averageSeconds,
+      secondsPerChar,
       wpm,
       cpm,
       score,
-      scoreRate,
+      scoreRate: getScoreRate(score),
       rhythmScore,
       avgKeyMs,
       keyAnalysis,
       wordAnalysis,
       comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-      rank: getRank(scoreRate)
+      rank: getRank(score)
     };
   }
   const targetCount = Math.max(1, game.attemptCount || attempts || 1);
   const completionRate = clamp(game.correctCount / targetCount, 0, 1);
-  const missPenalty = game.missCount * 25;
+  const missPenalty = game.missCount * 220;
+  const speedBonus = 8500 * completionRate * accuracyRate * speedPower;
   const score = Math.max(0, Math.round(
-    700 * completionRate +
-    250 * accuracyRate +
-    350 * speedBonusRate * completionRate -
+    900 * completionRate +
+    350 * accuracyRate +
+    speedBonus -
     missPenalty +
     rhythmScore
   ));
-  const scoreRate = clamp(
-    completionRate * 58 +
-    accuracyRate * 22 +
-    speedBonusRate * 20 * completionRate -
-    game.missCount * 2 +
-    Math.min(8, rhythmScore / 35),
-    0,
-    100
-  );
   return {
     correctCount: game.correctCount,
     missCount: game.missCount,
     accuracy,
     totalSeconds,
     averageSeconds,
+    secondsPerChar,
     wpm,
     cpm,
     score,
-    scoreRate,
+    scoreRate: getScoreRate(score),
     rhythmScore,
     avgKeyMs,
     keyAnalysis,
     wordAnalysis,
     comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-    rank: getRank(scoreRate)
+    rank: getRank(score)
   };
 }
 
@@ -821,6 +820,7 @@ function blankStats() {
     accuracy: 0,
     totalSeconds: 0,
     averageSeconds: 0,
+    secondsPerChar: 0,
     wpm: 0,
     cpm: 0,
     score: 0,
@@ -1148,6 +1148,7 @@ function startDemoTyping() {
     }
     const nextChar = answer.charAt(current.length);
     els.answerInput.value = current + nextChar;
+    updateInputMirror();
     recordTypedKey(nextChar, performance.now());
     playKeySound();
     checkAutoCorrect();
@@ -1315,10 +1316,10 @@ function playTone(frequency, duration, type, gainScale, delay = 0) {
   oscillator.stop(start + duration + 0.02);
 }
 
-function getRank(scoreRate) {
-  if (scoreRate >= 90) return "S";
-  if (scoreRate >= 75) return "A";
-  if (scoreRate >= 55) return "B";
+function getRank(score) {
+  if (score >= 8500) return "S";
+  if (score >= 6000) return "A";
+  if (score >= 3000) return "B";
   return "C";
 }
 
@@ -1334,9 +1335,15 @@ function roundUpToFour(value) {
   return Math.max(4, Math.ceil(Math.max(0, value) / 4) * 4);
 }
 
-function getSpeedBonusRate(averageSeconds) {
-  if (!averageSeconds) return 0;
-  return clamp((6 - averageSeconds) / 4.5, 0, 1);
+function getSpeedPower(secondsPerChar, cpm) {
+  if (!secondsPerChar && !cpm) return 0;
+  const charSpeedRate = clamp((0.75 - secondsPerChar) / 0.65, 0, 1);
+  const cpmRate = clamp(cpm / 850, 0, 1);
+  return Math.max(Math.pow(charSpeedRate, 2.2), Math.pow(cpmRate, 2));
+}
+
+function getScoreRate(score) {
+  return clamp(score / 100, 0, 100);
 }
 
 function getRhythmBpm() {
