@@ -50,7 +50,7 @@ input[type="checkbox"] {
   margin: 0 auto;
   padding: 8px;
   display: grid;
-  grid-template-rows: 74px minmax(0, 1fr) 154px;
+  grid-template-rows: 74px minmax(0, 1fr) 166px;
   gap: 8px;
 }
 
@@ -66,6 +66,7 @@ input[type="checkbox"] {
 .image-panel,
 .result-card,
 .rank-card,
+.analysis-card,
 .miss-card,
 .ranking-card {
   background: linear-gradient(180deg, var(--panel2), var(--panel));
@@ -99,6 +100,8 @@ input[type="checkbox"] {
 .compact-label span,
 .compact-grid span,
 .sound-block span,
+.rhythm-block span,
+.demo-block span,
 .backlog-list,
 .stats-grid span {
   color: var(--muted);
@@ -251,10 +254,11 @@ input[type="number"] {
 .side-panel {
   min-height: 0;
   padding: 10px;
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .control-block {
@@ -285,7 +289,9 @@ input[type="number"] {
 
 .compact-label,
 .compact-grid label,
-.sound-block label {
+.sound-block label,
+.rhythm-block label,
+.demo-block label {
   display: grid;
   gap: 4px;
   margin-top: 7px;
@@ -324,10 +330,47 @@ input[type="number"] {
   margin: 0 0 4px;
 }
 
+.rhythm-block label:first-of-type {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rhythm-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.rhythm-row label {
+  margin-top: 0;
+}
+
+.rhythm-row label:last-child {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
+.rhythm-block input[type="number"] {
+  height: 30px;
+}
+
+.demo-block label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .backlog-block {
   min-height: 0;
   padding-bottom: 0;
-  overflow: hidden;
 }
 
 .backlog-list {
@@ -352,7 +395,7 @@ input[type="number"] {
   min-height: 0;
   padding: 10px;
   display: grid;
-  grid-template-rows: 36px minmax(176px, 1fr) 122px 66px;
+  grid-template-rows: 36px minmax(160px, 1fr) 152px 66px;
   gap: 8px;
 }
 
@@ -416,11 +459,32 @@ input[type="number"] {
 }
 
 #answerInput {
-  height: 62px;
+  height: 56px;
   margin-top: 8px;
   padding: 6px 12px;
   font-family: Consolas, "Courier New", monospace;
   font-size: clamp(30px, 4vw, 52px);
+}
+
+.input-mirror {
+  height: 30px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  border: 1px solid rgba(53, 67, 90, 0.7);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #dce7ff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 18px;
+  line-height: 20px;
+}
+
+.input-mirror:empty::before {
+  content: "入力追従";
+  color: rgba(170, 180, 198, 0.55);
 }
 
 .answer-actions {
@@ -462,6 +526,11 @@ input[type="number"] {
   font-weight: 1000;
 }
 
+.countdown.start-word {
+  font-size: min(9vw, 88px);
+  letter-spacing: 0;
+}
+
 .hidden {
   display: none !important;
 }
@@ -470,13 +539,18 @@ input[type="number"] {
   min-width: 0;
   min-height: 0;
   padding: 10px;
+  display: grid;
+  place-items: center;
 }
 
 .panel-board {
   position: relative;
   display: grid;
-  width: 100%;
-  height: 100%;
+  width: min(100%, calc((100vh - 272px) * 16 / 9));
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
   min-height: 0;
   overflow: hidden;
   border: 1px solid #4c5668;
@@ -535,13 +609,14 @@ input[type="number"] {
 
 .bottom-bar {
   display: grid;
-  grid-template-columns: 1fr 150px 1fr 1.35fr;
+  grid-template-columns: 0.95fr 132px 1.18fr 0.82fr 1.22fr;
   gap: 8px;
   min-height: 0;
 }
 
 .result-card,
 .rank-card,
+.analysis-card,
 .miss-card,
 .ranking-card {
   padding: 9px 12px;
@@ -611,6 +686,60 @@ h2 {
 .rank-card span {
   color: var(--gold);
   font-size: 14px;
+}
+
+.analysis-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 5px;
+}
+
+.analysis-card .card-head span {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 5px;
+}
+
+.analysis-grid div {
+  min-width: 0;
+  padding: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.analysis-grid span,
+.analysis-lists span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.analysis-grid b,
+.analysis-lists b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.analysis-lists {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 3px;
+}
+
+.analysis-lists p {
+  min-width: 0;
+  margin: 0;
 }
 
 .miss-card {
@@ -708,7 +837,7 @@ h2 {
 
 @media (max-aspect-ratio: 16/10) {
   .app-shell {
-    grid-template-rows: 68px minmax(0, 1fr) 138px;
+    grid-template-rows: 68px minmax(0, 1fr) 150px;
     gap: 6px;
     padding: 6px;
   }
@@ -725,5 +854,9 @@ h2 {
 
   #answerInput {
     font-size: clamp(28px, 3.5vw, 46px);
+  }
+
+  .panel-board {
+    width: min(100%, calc((100vh - 236px) * 16 / 9));
   }
 }
