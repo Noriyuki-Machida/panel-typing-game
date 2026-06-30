@@ -36,6 +36,7 @@
       </section>
 
       <button id="startBtn" class="button primary-button" type="button">ゲーム開始</button>
+      <button id="mobilePlayBtn" class="button secondary-button" type="button">スマホ</button>
       <button id="abortBtn" class="button danger-button" type="button">中止</button>
     </header>
 
@@ -268,6 +269,44 @@
         <ol id="rankingList" class="ranking-list"></ol>
       </section>
     </footer>
+  </main>
+
+  <main id="mobilePlayShell" class="mobile-play-shell hidden">
+    <header class="mobile-head">
+      <button id="mobileBackBtn" class="mini-button" type="button">PC設定</button>
+      <div>
+        <span id="mobileVersion" class="mobile-version">v2.1</span>
+        <strong id="mobileStageTitle">未読込</strong>
+      </div>
+    </header>
+
+    <section class="mobile-status">
+      <div><span>問題</span><b><span id="mobileCurrentIndex">0</span>/<span id="mobileTargetCount">0</span></b></div>
+      <div><span>正解</span><b id="mobileCorrectCount">0</b></div>
+      <div><span>ミス</span><b id="mobileMissCount">0</b></div>
+      <div><span>TIME</span><b id="mobileTimerValue">--</b></div>
+    </section>
+
+    <section class="mobile-play-card">
+      <div id="mobileCountdown" class="mobile-countdown hidden">3</div>
+      <div id="mobileQuestionText" class="mobile-question-text">問題を読み込んでください</div>
+      <div id="mobileQuestionSub" class="mobile-question-sub"></div>
+      <input id="mobileAnswerInput" class="mobile-answer-input" type="text" autocomplete="off" spellcheck="false" disabled>
+      <div id="mobileInputMirror" class="mobile-input-mirror"></div>
+      <div class="mobile-actions">
+        <button id="mobileStartBtn" class="button primary-button" type="button">スタート</button>
+        <button id="mobileAbortBtn" class="button danger-button" type="button">中止</button>
+      </div>
+      <div class="mobile-feedback">
+        <strong id="mobileFeedbackText">待機中</strong>
+        <span id="mobileFeedbackSub">PC設定の問題を使ってプレイします</span>
+      </div>
+    </section>
+
+    <section class="mobile-score-card">
+      <div><span>Score</span><b id="mobileLiveScore">0</b></div>
+      <div><span>Rank</span><b id="mobileRankValue">-</b></div>
+    </section>
   </main>
 
   <script src="app.js"></script>

@@ -3,6 +3,7 @@
 const STORAGE_SETTINGS = "panelTypingGame.settings.v2";
 const STORAGE_HISTORY = "panelTypingGame.history.v2";
 const STORAGE_REVEAL = "panelTypingGame.reveal.v1";
+const STORAGE_PROBLEMS = "panelTypingGame.problems.v2";
 const BOARD_PANEL_COUNT = 96;
 const APP_VERSION = "v2.1";
 const SAMPLE_PROBLEMS = [
@@ -43,7 +44,28 @@ const els = {
   timeLimitInput: $("timeLimitInput"),
   noTimeLimitToggle: $("noTimeLimitToggle"),
   startBtn: $("startBtn"),
+  mobilePlayBtn: $("mobilePlayBtn"),
   abortBtn: $("abortBtn"),
+  mobilePlayShell: $("mobilePlayShell"),
+  mobileBackBtn: $("mobileBackBtn"),
+  mobileVersion: $("mobileVersion"),
+  mobileStageTitle: $("mobileStageTitle"),
+  mobileCurrentIndex: $("mobileCurrentIndex"),
+  mobileTargetCount: $("mobileTargetCount"),
+  mobileCorrectCount: $("mobileCorrectCount"),
+  mobileMissCount: $("mobileMissCount"),
+  mobileTimerValue: $("mobileTimerValue"),
+  mobileCountdown: $("mobileCountdown"),
+  mobileQuestionText: $("mobileQuestionText"),
+  mobileQuestionSub: $("mobileQuestionSub"),
+  mobileAnswerInput: $("mobileAnswerInput"),
+  mobileInputMirror: $("mobileInputMirror"),
+  mobileStartBtn: $("mobileStartBtn"),
+  mobileAbortBtn: $("mobileAbortBtn"),
+  mobileFeedbackText: $("mobileFeedbackText"),
+  mobileFeedbackSub: $("mobileFeedbackSub"),
+  mobileLiveScore: $("mobileLiveScore"),
+  mobileRankValue: $("mobileRankValue"),
   folderInput: $("folderInput"),
   fileSelect: $("fileSelect"),
   pasteArea: $("pasteArea"),
@@ -128,6 +150,7 @@ const state = {
   slideshowTimerId: 0,
   slideshowIndex: 0,
   rankingFilter: "typing",
+  viewMode: "desktop",
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -137,12 +160,15 @@ const state = {
 
 applySettings();
 els.versionBadge.textContent = APP_VERSION;
+els.mobileVersion.textContent = APP_VERSION;
+restoreSavedProblems();
 renderSampleSelect();
 renderFileSelect();
 renderPanels(0);
 renderHistory();
 updateTimeLimitControls();
 updateAllStats();
+syncViewFromHash();
 
 els.folderInput.addEventListener("change", handleFolderInput);
 els.fileSelect.addEventListener("change", () => {
@@ -158,11 +184,19 @@ els.playerNameInput.addEventListener("change", () => {
 });
 els.imageInput.addEventListener("change", handleImageInput);
 els.resetPuzzleBtn.addEventListener("click", resetPuzzle);
+els.mobilePlayBtn.addEventListener("click", () => switchViewMode("mobile"));
+els.mobileBackBtn.addEventListener("click", () => switchViewMode("desktop"));
 els.startBtn.addEventListener("click", () => {
   unlockAudio();
   startGame();
 });
+els.mobileStartBtn.addEventListener("click", () => {
+  unlockAudio();
+  ensureMobileProblems();
+  startGame();
+});
 els.abortBtn.addEventListener("click", abortGame);
+els.mobileAbortBtn.addEventListener("click", abortGame);
 els.judgeBtn.addEventListener("click", judgeCurrentAnswer);
 els.skipBtn.addEventListener("click", () => missCurrentQuestion("ミス"));
 els.retryMissBtn.addEventListener("click", retryMissQuestions);
@@ -197,6 +231,29 @@ els.answerInput.addEventListener("keydown", (event) => {
     judgeCurrentAnswer();
   }
 });
+
+els.mobileAnswerInput.addEventListener("compositionstart", () => {
+  state.composing = true;
+});
+els.mobileAnswerInput.addEventListener("compositionend", () => {
+  state.composing = false;
+  syncMobileInputToMain();
+  checkAutoCorrect();
+});
+els.mobileAnswerInput.addEventListener("input", () => {
+  syncMobileInputToMain();
+  playKeySound();
+  checkAutoCorrect();
+});
+els.mobileAnswerInput.addEventListener("keydown", (event) => {
+  recordKeydown(event);
+  if (event.key === "Enter") {
+    event.preventDefault();
+    judgeCurrentAnswer();
+  }
+});
+
+window.addEventListener("hashchange", syncViewFromHash);
 
 [
   els.gameTypeSelect,
@@ -292,6 +349,7 @@ async function handleFolderInput(event) {
   }
 
   state.files = parsed;
+  persistProblems();
   renderFileSelect();
   updateAllStats();
   setFeedback(parsed.length ? "読み込み完了" : "問題なし", parsed.length ? `${parsed.length}ファイル` : "2行目以降に問題を書いてください", !parsed.length);
@@ -317,6 +375,7 @@ function handlePasteLoad() {
     }))
   };
   state.files.push(file);
+  persistProblems();
   els.fileSelect.value = file.id;
   renderFileSelect(file.id);
   updateAllStats();
@@ -329,6 +388,70 @@ function renderSampleSelect() {
   for (const sample of SAMPLE_PROBLEMS) {
     els.sampleSelect.appendChild(new Option(sample.name, sample.id));
   }
+}
+
+function serializeProblems() {
+  return state.files.map((file) => ({
+    id: file.id,
+    name: file.name,
+    title: file.title,
+    mode: file.mode || "",
+    questions: file.questions.map((question) => ({
+      raw: question.raw,
+      fileName: question.fileName,
+      sourceTitle: question.sourceTitle
+    }))
+  }));
+}
+
+function persistProblems() {
+  localStorage.setItem(STORAGE_PROBLEMS, JSON.stringify(serializeProblems()));
+}
+
+function restoreSavedProblems() {
+  const saved = loadJson(STORAGE_PROBLEMS, []);
+  if (!Array.isArray(saved) || !saved.length) return;
+  state.files = saved
+    .map((file) => {
+      const mode = normalizeProblemMode(file.mode);
+      const questions = Array.isArray(file.questions) ? file.questions : [];
+      return {
+        id: file.id || makeId(),
+        name: file.name || "saved.txt",
+        title: file.title || "保存済み問題",
+        mode,
+        questions: questions
+          .map((question) => ({
+            ...parseQuestionLine(question.raw || "", mode),
+            fileName: question.fileName || file.name || "saved.txt",
+            sourceTitle: question.sourceTitle || file.title || "保存済み問題"
+          }))
+          .filter((question) => question.answer)
+      };
+    })
+    .filter((file) => file.questions.length);
+}
+
+function ensureMobileProblems() {
+  if (state.files.length) return;
+  const sample = SAMPLE_PROBLEMS[0];
+  const text = [`#mode=${sample.mode}`, sample.title, ...sample.lines].join("\n");
+  const entry = parseProblemText(text, `${sample.name}.txt`);
+  state.files = [{
+    id: makeId(),
+    name: `${sample.name}.sample`,
+    title: entry.title,
+    mode: entry.mode,
+    questions: entry.questions.map((question) => ({
+      ...question,
+      fileName: `${sample.name}.sample`,
+      sourceTitle: entry.title
+    }))
+  }];
+  renderFileSelect(state.files[0].id);
+  els.fileSelect.value = state.files[0].id;
+  persistProblems();
+  updateAllStats();
 }
 
 function handleSampleLoad() {
@@ -348,11 +471,33 @@ function handleSampleLoad() {
     }))
   };
   state.files.push(file);
+  persistProblems();
   renderFileSelect(file.id);
   els.fileSelect.value = file.id;
   applySelectedFileMode();
   updateAllStats();
   setFeedback("サンプル読込", `${sample.name} / ${entry.questions.length}問`, false);
+}
+
+function switchViewMode(mode) {
+  state.viewMode = mode === "mobile" ? "mobile" : "desktop";
+  document.body.classList.toggle("mobile-play-active", state.viewMode === "mobile");
+  els.mobilePlayShell.classList.toggle("hidden", state.viewMode !== "mobile");
+  if (state.viewMode === "mobile") {
+    ensureMobileProblems();
+    if (location.hash !== "#play") history.replaceState(null, "", "#play");
+  } else if (location.hash === "#play") {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  syncMobileView();
+}
+
+function syncViewFromHash() {
+  switchViewMode(location.hash === "#play" ? "mobile" : "desktop");
+}
+
+function isMobileView() {
+  return state.viewMode === "mobile";
 }
 
 function handleImageInput(event) {
@@ -445,7 +590,7 @@ function getSelectedCommaMode() {
   return els.commaModeSelect.value === "answer" ? "answer" : els.commaModeSelect.value;
 }
 
-function renderFileSelect(selected = els.fileSelect.value || "all") {
+function renderFileSelect(selected = els.fileSelect.value || state.settings.selectedFile || "all") {
   els.fileSelect.innerHTML = "";
   const allOption = new Option("全ファイル", "all");
   els.fileSelect.appendChild(allOption);
@@ -530,6 +675,9 @@ function runCountdown() {
   els.countdownOverlay.classList.remove("hidden");
   els.countdownOverlay.classList.remove("start-word");
   els.countdownOverlay.textContent = String(value);
+  els.mobileCountdown.classList.remove("hidden");
+  els.mobileCountdown.classList.remove("start-word");
+  els.mobileCountdown.textContent = String(value);
   setFeedback("カウントダウン", "3秒後に開始", false);
 
   state.countdownId = window.setInterval(() => {
@@ -537,15 +685,20 @@ function runCountdown() {
     if (value > 0) {
       els.countdownOverlay.classList.remove("start-word");
       els.countdownOverlay.textContent = String(value);
+      els.mobileCountdown.classList.remove("start-word");
+      els.mobileCountdown.textContent = String(value);
       return;
     }
     if (value === 0) {
       els.countdownOverlay.classList.add("start-word");
       els.countdownOverlay.textContent = "START";
+      els.mobileCountdown.classList.add("start-word");
+      els.mobileCountdown.textContent = "START";
       return;
     }
     clearCountdown();
     els.countdownOverlay.classList.add("hidden");
+    els.mobileCountdown.classList.add("hidden");
     beginGameAfterCountdown();
   }, 1000);
 }
@@ -606,10 +759,13 @@ function nextQuestion() {
   game.lastKeyTime = 0;
   els.questionText.textContent = game.current.prompt;
   els.questionSub.textContent = game.current.sub || game.current.sourceTitle || "";
+  els.mobileQuestionText.textContent = game.current.prompt;
+  els.mobileQuestionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
+  els.mobileAnswerInput.value = "";
   applyTextLengthClasses(game.current);
   updateInputMirror();
-  els.answerInput.focus();
+  (isMobileView() ? els.mobileAnswerInput : els.answerInput).focus();
   if (game.gameType === "timeAttack") {
     updateTimeAttackTimerReadout();
   } else {
@@ -630,10 +786,23 @@ function checkAutoCorrect() {
 function updateInputMirror() {
   if (!els.inputMirror) return;
   els.inputMirror.textContent = els.answerInput.value || "";
+  if (els.mobileInputMirror) {
+    els.mobileInputMirror.textContent = els.answerInput.value || "";
+  }
+  if (document.activeElement !== els.mobileAnswerInput) {
+    els.mobileAnswerInput.value = els.answerInput.value || "";
+  }
   window.requestAnimationFrame(() => {
     els.inputMirror.scrollLeft = els.inputMirror.scrollWidth;
     els.answerInput.scrollLeft = els.answerInput.scrollWidth;
+    els.mobileInputMirror.scrollLeft = els.mobileInputMirror.scrollWidth;
+    els.mobileAnswerInput.scrollLeft = els.mobileAnswerInput.scrollWidth;
   });
+}
+
+function syncMobileInputToMain() {
+  els.answerInput.value = els.mobileAnswerInput.value;
+  updateInputMirror();
 }
 
 function applyTextLengthClasses(question) {
@@ -648,6 +817,8 @@ function applyTextLengthClasses(question) {
   els.answerInput.classList.toggle("very-long-answer", answerLength >= 44);
   els.inputMirror.classList.toggle("long-answer", answerLength >= 24);
   els.inputMirror.classList.toggle("very-long-answer", answerLength >= 44);
+  els.mobileQuestionText.classList.toggle("long-text", promptLength >= 22);
+  els.mobileQuestionText.classList.toggle("very-long-text", promptLength >= 42);
 }
 
 function judgeCurrentAnswer() {
@@ -739,6 +910,7 @@ function startQuestionTimer() {
   const limit = getTimeLimitSeconds();
   if (!game || !limit) {
     els.timerValue.textContent = "--";
+    els.mobileTimerValue.textContent = "--";
     els.timerFill.style.width = "100%";
     return;
   }
@@ -748,6 +920,7 @@ function startQuestionTimer() {
     if (!state.game || state.game !== game || !game.running) return;
     const remaining = Math.max(0, end - performance.now());
     els.timerValue.textContent = (remaining / 1000).toFixed(1);
+    els.mobileTimerValue.textContent = (remaining / 1000).toFixed(1);
     els.timerFill.style.width = `${Math.max(0, (remaining / (limit * 1000)) * 100)}%`;
     if (remaining <= 0) {
       missCurrentQuestion("時間切れ");
@@ -777,6 +950,7 @@ function updateTimeAttackTimerReadout() {
   if (!game || game.gameType !== "timeAttack") return;
   const remaining = Math.max(0, game.attackEndTime - performance.now());
   els.timerValue.textContent = (remaining / 1000).toFixed(1);
+  els.mobileTimerValue.textContent = (remaining / 1000).toFixed(1);
   els.timerFill.style.width = `${game.attackLimitSeconds ? Math.max(0, remaining / (game.attackLimitSeconds * 1000) * 100) : 0}%`;
   const elapsed = game.attackLimitSeconds * 1000 - remaining;
   els.progressFill.style.width = `${game.attackLimitSeconds ? Math.min(100, elapsed / (game.attackLimitSeconds * 1000) * 100) : 0}%`;
@@ -935,6 +1109,13 @@ function updateAllStats() {
   els.correctCount.textContent = stats.correctCount;
   els.missCount.textContent = stats.missCount;
   els.liveScore.textContent = formatNumber(stats.score);
+  els.mobileStageTitle.textContent = game ? game.title : buildStageTitle();
+  els.mobileCurrentIndex.textContent = displayCurrent;
+  els.mobileTargetCount.textContent = displayTarget;
+  els.mobileCorrectCount.textContent = stats.correctCount;
+  els.mobileMissCount.textContent = stats.missCount;
+  els.mobileLiveScore.textContent = formatNumber(stats.score);
+  els.mobileRankValue.textContent = stats.rank;
   if (isTimeAttack) {
     const elapsedSeconds = game.startTime ? Math.min(game.attackLimitSeconds, Math.max(0, (performance.now() - game.startTime) / 1000)) : 0;
     renderProgress(game.attackLimitSeconds, elapsedSeconds);
@@ -944,6 +1125,22 @@ function updateAllStats() {
   updateResultView(stats);
   renderMissList(game ? Array.from(game.missed.values()) : []);
   if (!game) renderPanels(getPreviewPanelCount());
+  syncMobileView();
+}
+
+function syncMobileView() {
+  const game = state.game;
+  const stats = calculateStats(game);
+  els.mobileVersion.textContent = APP_VERSION;
+  els.mobileStageTitle.textContent = game ? game.title : buildStageTitle();
+  els.mobileCorrectCount.textContent = stats.correctCount;
+  els.mobileMissCount.textContent = stats.missCount;
+  els.mobileLiveScore.textContent = formatNumber(stats.score);
+  els.mobileRankValue.textContent = stats.rank;
+  if (!game || !game.current) {
+    els.mobileQuestionText.textContent = els.questionText.textContent;
+    els.mobileQuestionSub.textContent = els.questionSub.textContent;
+  }
 }
 
 function calculateStats(game) {
@@ -1228,6 +1425,7 @@ function addHistory(stats, game) {
     date: new Date().toISOString(),
     title: game.title,
     playerName: getPlayerName(),
+    viewMode: state.viewMode,
     type: getScoreTypeLabel(scoreType),
     scoreType,
     problemSetKey: game.problemSetKey || buildProblemSetKey(),
@@ -1370,6 +1568,7 @@ function buildConditionKey(scoreType = state.rankingFilter || "typing") {
 
 function setInputsEnabled(enabled) {
   els.answerInput.disabled = !enabled;
+  els.mobileAnswerInput.disabled = !enabled;
   els.judgeBtn.disabled = !enabled;
   els.skipBtn.disabled = !enabled;
 }
@@ -1378,6 +1577,9 @@ function setFeedback(text, sub, isMiss) {
   els.feedbackText.textContent = text;
   els.feedbackText.classList.toggle("miss", Boolean(isMiss));
   els.feedbackSub.textContent = sub || "";
+  els.mobileFeedbackText.textContent = text;
+  els.mobileFeedbackText.classList.toggle("miss", Boolean(isMiss));
+  els.mobileFeedbackSub.textContent = sub || "";
 }
 
 function showSpeedBonus(answerLength, answerMs) {
@@ -1407,6 +1609,7 @@ function updateTimeLimitControls() {
   }
   const seconds = getTimeLimitSeconds();
   els.timerValue.textContent = seconds ? seconds.toFixed(1) : "--";
+  els.mobileTimerValue.textContent = seconds ? seconds.toFixed(1) : "--";
   els.timeLimitInput.disabled = els.noTimeLimitToggle.checked;
   if (!state.game || !state.game.running) {
     els.timerFill.style.width = "100%";
@@ -1434,6 +1637,7 @@ function clearCountdown() {
     window.clearInterval(state.countdownId);
     state.countdownId = 0;
   }
+  els.mobileCountdown.classList.add("hidden");
 }
 
 function clearTransitionTimer() {

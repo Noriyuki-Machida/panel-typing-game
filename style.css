@@ -56,7 +56,7 @@ input[type="checkbox"] {
 
 .top-bar {
   display: grid;
-  grid-template-columns: 180px minmax(340px, 1fr) 240px 142px 88px;
+  grid-template-columns: 180px minmax(300px, 1fr) 220px 118px 80px 78px;
   gap: 8px;
 }
 
@@ -654,6 +654,211 @@ input[type="number"] {
 
 .hidden {
   display: none !important;
+}
+
+body.mobile-play-active {
+  height: auto;
+  min-height: 100dvh;
+  overflow-y: auto;
+}
+
+body.mobile-play-active .app-shell {
+  display: none;
+}
+
+.mobile-play-shell {
+  width: min(100%, 760px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 10px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.mobile-head,
+.mobile-status,
+.mobile-play-card,
+.mobile-score-card {
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.28);
+}
+
+.mobile-head {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+}
+
+.mobile-head strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(18px, 5vw, 30px);
+}
+
+.mobile-version {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mobile-status {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+.mobile-status div,
+.mobile-score-card div {
+  min-width: 0;
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mobile-status span,
+.mobile-score-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.mobile-status b,
+.mobile-score-card b {
+  display: block;
+  margin-top: 3px;
+  font-size: clamp(18px, 5vw, 28px);
+}
+
+.mobile-play-card {
+  position: relative;
+  min-height: 0;
+  padding: 12px;
+  display: grid;
+  grid-template-rows: minmax(120px, auto) auto auto auto auto;
+  gap: 10px;
+}
+
+.mobile-question-text {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  text-align: center;
+  font-size: clamp(34px, 12vw, 76px);
+  line-height: 1.04;
+  font-weight: 1000;
+  overflow-wrap: anywhere;
+}
+
+.mobile-question-text.long-text {
+  font-size: clamp(24px, 8vw, 48px);
+  line-height: 1.12;
+}
+
+.mobile-question-text.very-long-text {
+  font-size: clamp(18px, 6vw, 34px);
+  line-height: 1.18;
+}
+
+.mobile-question-sub {
+  min-height: 24px;
+  text-align: center;
+  color: #e5e9f3;
+  font-size: clamp(14px, 4vw, 22px);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.mobile-answer-input {
+  width: 100%;
+  height: 58px;
+  padding: 7px 11px;
+  border: 1px solid #465675;
+  border-radius: 8px;
+  background: #050812;
+  color: var(--text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: clamp(28px, 9vw, 46px);
+}
+
+.mobile-input-mirror {
+  min-height: 28px;
+  padding: 4px 9px;
+  overflow-x: auto;
+  white-space: pre;
+  border: 1px solid rgba(53, 67, 90, 0.7);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #dce7ff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 16px;
+}
+
+.mobile-actions {
+  display: grid;
+  grid-template-columns: 1fr 0.72fr;
+  gap: 8px;
+}
+
+.mobile-actions .button {
+  min-height: 48px;
+  font-size: 17px;
+}
+
+.mobile-feedback {
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  text-align: center;
+  border: 1px solid rgba(53, 67, 90, 0.7);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.mobile-feedback strong {
+  color: var(--green);
+  font-size: 20px;
+}
+
+.mobile-feedback strong.miss {
+  color: var(--red);
+}
+
+.mobile-feedback span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mobile-score-card {
+  display: grid;
+  grid-template-columns: 1fr 0.58fr;
+  gap: 8px;
+  padding: 8px;
+}
+
+.mobile-countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 15, 0.84);
+  color: var(--gold);
+  font-size: min(28vw, 160px);
+  font-weight: 1000;
+}
+
+.mobile-countdown.start-word {
+  font-size: min(16vw, 76px);
 }
 
 .image-panel {
