@@ -134,7 +134,8 @@
             <li>問題別成績</li>
             <li>難易度別スコア補正</li>
             <li>正解表示時間設定</li>
-          <li>CSV/列形式インポート</li>
+            <li>CSV/列形式インポート</li>
+            <li>スマートフォン用プレイ画面</li>
           </ul>
         </section>
       </aside>
@@ -223,6 +224,11 @@
         <div class="card-head">
           <h2>ランキング</h2>
           <button id="clearHistoryBtn" class="mini-button" type="button">クリア</button>
+        </div>
+        <div id="rankingTabs" class="ranking-tabs" role="group" aria-label="ランキング種別">
+          <button class="ranking-tab active" type="button" data-score-type="typing">タイピング</button>
+          <button class="ranking-tab" type="button" data-score-type="quiz">クイズ</button>
+          <button class="ranking-tab" type="button" data-score-type="timeAttack">TA</button>
         </div>
         <ol id="rankingList" class="ranking-list"></ol>
       </section>

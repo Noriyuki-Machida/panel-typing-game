@@ -76,6 +76,7 @@ const els = {
   copyMissBtn: $("copyMissBtn"),
   saveMissBtn: $("saveMissBtn"),
   clearHistoryBtn: $("clearHistoryBtn"),
+  rankingTabs: $("rankingTabs"),
   rankingList: $("rankingList")
 };
 
@@ -90,6 +91,7 @@ const state = {
   transitionId: 0,
   rhythmTimerId: 0,
   demoTimerId: 0,
+  rankingFilter: "typing",
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -123,6 +125,12 @@ els.retryMissBtn.addEventListener("click", retryMissQuestions);
 els.copyMissBtn.addEventListener("click", copyMissQuestions);
 els.saveMissBtn.addEventListener("click", saveMissQuestions);
 els.clearHistoryBtn.addEventListener("click", clearHistory);
+els.rankingTabs.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-score-type]");
+  if (!button) return;
+  state.rankingFilter = button.dataset.scoreType;
+  renderHistory();
+});
 
 els.answerInput.addEventListener("compositionstart", () => {
   state.composing = true;
@@ -339,6 +347,7 @@ function startGame(options = {}) {
   }
 
   const gameType = els.gameTypeSelect.value === "timeAttack" && !options.questions ? "timeAttack" : "normal";
+  const scoreType = options.scoreType || getScoreType(gameType);
   const baseCount = Math.min(options.questions ? pool.length : getSelectedAttemptCount(pool.length), pool.length);
   const questions = chooseQuestions(pool, baseCount);
   const panelCount = BOARD_PANEL_COUNT;
@@ -348,6 +357,7 @@ function startGame(options = {}) {
     running: false,
     finished: false,
     gameType,
+    scoreType,
     title: options.title || buildStageTitle(),
     questions,
     attemptCount: gameType === "timeAttack" ? Infinity : questions.length,
@@ -458,6 +468,7 @@ function nextQuestion() {
   els.questionText.textContent = game.current.prompt;
   els.questionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
+  applyTextLengthClasses(game.current);
   updateInputMirror();
   els.answerInput.focus();
   if (game.gameType === "timeAttack") {
@@ -484,6 +495,20 @@ function updateInputMirror() {
     els.inputMirror.scrollLeft = els.inputMirror.scrollWidth;
     els.answerInput.scrollLeft = els.answerInput.scrollWidth;
   });
+}
+
+function applyTextLengthClasses(question) {
+  const promptLength = [...(question.prompt || "")].length;
+  const subLength = [...(question.sub || "")].length;
+  const answerLength = [...(question.answer || "")].length;
+  els.questionText.classList.toggle("long-text", promptLength >= 22);
+  els.questionText.classList.toggle("very-long-text", promptLength >= 42);
+  els.questionSub.classList.toggle("long-text", subLength >= 28);
+  els.questionSub.classList.toggle("very-long-text", subLength >= 52);
+  els.answerInput.classList.toggle("long-answer", answerLength >= 24);
+  els.answerInput.classList.toggle("very-long-answer", answerLength >= 44);
+  els.inputMirror.classList.toggle("long-answer", answerLength >= 24);
+  els.inputMirror.classList.toggle("very-long-answer", answerLength >= 44);
 }
 
 function judgeCurrentAnswer() {
@@ -750,14 +775,17 @@ function calculateStats(game) {
   const avgKeyMs = getAverage(game.keyTimings || []);
   const keyAnalysis = buildKeyAnalysis(game.keyStats);
   const wordAnalysis = buildWordAnalysis(game.wordStats);
-  if (game.gameType === "timeAttack") {
+  const scoreType = game.scoreType || getScoreType(game.gameType);
+  if (scoreType === "timeAttack") {
     const attackMinutes = Math.max((game.attackLimitSeconds || totalSeconds || 60) / 60, 1 / 60);
     const correctPerMinute = game.correctCount / attackMinutes;
     const densityPower = Math.pow(clamp(correctPerMinute / 45, 0, 1), 1.7);
     const missPenalty = game.missCount * 260;
+    const participationBase = game.correctCount ? 300 : 0;
     const speedBonus = 7600 * accuracyRate * Math.max(speedPower, densityPower);
     const score = Math.max(0, Math.round(
-      game.correctCount * 80 +
+      participationBase +
+      game.correctCount * 95 +
       accuracyRate * 450 +
       speedBonus -
       missPenalty +
@@ -774,21 +802,44 @@ function calculateStats(game) {
       cpm,
       score,
       scoreRate: getScoreRate(score),
+      scoreType,
       rhythmScore,
       avgKeyMs,
       keyAnalysis,
       wordAnalysis,
       comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-      rank: getRank(score)
+      rank: getRank(score, scoreType)
     };
   }
   const targetCount = Math.max(1, game.attemptCount || attempts || 1);
   const completionRate = clamp(game.correctCount / targetCount, 0, 1);
-  const missPenalty = game.missCount * 220;
-  const speedBonus = 8500 * completionRate * accuracyRate * speedPower;
+  if (scoreType === "quiz") {
+    const score = Math.max(0, Math.round(100 * completionRate));
+    return {
+      correctCount: game.correctCount,
+      missCount: game.missCount,
+      accuracy,
+      totalSeconds,
+      averageSeconds,
+      secondsPerChar,
+      wpm,
+      cpm,
+      score,
+      scoreRate: score,
+      scoreType,
+      rhythmScore,
+      avgKeyMs,
+      keyAnalysis,
+      wordAnalysis,
+      comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
+      rank: getRank(score, scoreType)
+    };
+  }
+  const missPenalty = game.missCount * 300;
+  const base = 1000 * completionRate * accuracyRate;
+  const speedBonus = 9000 * completionRate * accuracyRate * speedPower;
   const score = Math.max(0, Math.round(
-    900 * completionRate +
-    350 * accuracyRate +
+    base +
     speedBonus -
     missPenalty +
     rhythmScore
@@ -804,12 +855,13 @@ function calculateStats(game) {
     cpm,
     score,
     scoreRate: getScoreRate(score),
+    scoreType,
     rhythmScore,
     avgKeyMs,
     keyAnalysis,
     wordAnalysis,
     comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-    rank: getRank(score)
+    rank: getRank(score, scoreType)
   };
 }
 
@@ -825,6 +877,7 @@ function blankStats() {
     cpm: 0,
     score: 0,
     scoreRate: 0,
+    scoreType: "typing",
     rhythmScore: 0,
     avgKeyMs: 0,
     keyAnalysis: { fast: [], slow: [] },
@@ -944,7 +997,7 @@ function retryMissQuestions() {
   const game = state.game;
   if (!game || !game.missed.size) return;
   const questions = Array.from(game.missed.values()).map((question) => ({ ...question, id: makeId() }));
-  startGame({ questions, title: "ミス問題" });
+  startGame({ questions, title: "ミス問題", scoreType: game.scoreType });
 }
 
 async function copyMissQuestions() {
@@ -980,10 +1033,12 @@ function getMissText() {
 }
 
 function addHistory(stats, game) {
+  const scoreType = stats.scoreType || game.scoreType || getScoreType(game.gameType);
   state.history.push({
     date: new Date().toISOString(),
     title: game.title,
-    type: game.gameType === "timeAttack" ? "TA" : "通常",
+    type: getScoreTypeLabel(scoreType),
+    scoreType,
     total: game.gameType === "timeAttack" ? game.attackLimitSeconds : game.attemptCount,
     score: stats.score,
     scoreRate: stats.scoreRate,
@@ -993,27 +1048,51 @@ function addHistory(stats, game) {
     rank: stats.rank
   });
   state.history.sort((a, b) => b.score - a.score);
-  state.history = state.history.slice(0, 20);
+  state.history = state.history.slice(0, 200);
   localStorage.setItem(STORAGE_HISTORY, JSON.stringify(state.history));
   renderHistory();
 }
 
 function renderHistory() {
   els.rankingList.innerHTML = "";
-  if (!state.history.length) {
+  const filter = state.rankingFilter || "typing";
+  for (const button of els.rankingTabs.querySelectorAll("[data-score-type]")) {
+    button.classList.toggle("active", button.dataset.scoreType === filter);
+  }
+  const entries = state.history
+    .map((entry) => ({ ...entry, scoreType: normalizeHistoryScoreType(entry) }))
+    .filter((entry) => entry.scoreType === filter)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+  if (!entries.length) {
     const li = document.createElement("li");
     li.className = "small-text";
-    li.textContent = "履歴なし";
+    li.textContent = `${getScoreTypeLabel(filter)}の履歴なし`;
     els.rankingList.appendChild(li);
     return;
   }
-  state.history.slice(0, 20).forEach((entry, index) => {
+  entries.forEach((entry, index) => {
     const li = document.createElement("li");
     li.className = "ranking-item";
-    li.innerHTML = `<span class="ranking-rank">${index + 1}位</span><span class="ranking-type">${entry.type || "通常"}</span><span class="ranking-title">${escapeHtml(entry.title)}</span><span class="ranking-grade">${entry.rank}</span><span class="ranking-score">${formatNumber(entry.score)}</span>`;
+    li.innerHTML = `<span class="ranking-rank">${index + 1}位</span><span class="ranking-type">${getScoreTypeLabel(entry.scoreType)}</span><span class="ranking-title">${escapeHtml(entry.title)}</span><span class="ranking-grade">${entry.rank}</span><span class="ranking-score">${formatNumber(entry.score)}</span>`;
     li.title = `${new Date(entry.date).toLocaleString("ja-JP")} 正解:${entry.correct} ミス:${entry.miss} 時間:${formatDuration(entry.seconds)}`;
     els.rankingList.appendChild(li);
   });
+}
+
+function normalizeHistoryScoreType(entry) {
+  if (entry.scoreType === "quiz" || entry.scoreType === "typing" || entry.scoreType === "timeAttack") {
+    return entry.scoreType;
+  }
+  if (entry.type === "TA" || entry.type === "タイムアタック") return "timeAttack";
+  if (entry.type === "クイズ") return "quiz";
+  return "typing";
+}
+
+function getScoreTypeLabel(scoreType) {
+  if (scoreType === "quiz") return "クイズ";
+  if (scoreType === "timeAttack") return "TA";
+  return "タイピング";
 }
 
 function clearHistory() {
@@ -1113,6 +1192,7 @@ function clearTransitionTimer() {
 
 function clearDemoTimer() {
   if (state.demoTimerId) {
+    window.clearTimeout(state.demoTimerId);
     window.clearInterval(state.demoTimerId);
     state.demoTimerId = 0;
   }
@@ -1127,6 +1207,10 @@ function startDemoTyping() {
   }
   const answer = game.current.answer || "";
   if (!answer) return;
+  if (game.rhythmEnabled) {
+    startRhythmSyncedDemoTyping(game, answer);
+    return;
+  }
   const durationMs = getDemoDurationMs(game, answer);
   const stepMs = clamp(Math.floor(durationMs / Math.max(1, answer.length)), 45, 800);
   els.demoStatus.textContent = `自動入力中 ${Math.round(durationMs / 1000 * 10) / 10}s`;
@@ -1153,6 +1237,58 @@ function startDemoTyping() {
     playKeySound();
     checkAutoCorrect();
   }, stepMs);
+}
+
+function startRhythmSyncedDemoTyping(game, answer) {
+  const beatMs = 60000 / game.rhythmBpm;
+  els.demoStatus.textContent = `リズム同期 ${game.rhythmBpm} BPM`;
+  const scheduleNext = () => {
+    if (!state.game || state.game !== game || !game.running || !game.current || !game.demoEnabled) {
+      clearDemoTimer();
+      return;
+    }
+    const current = els.answerInput.value;
+    if (current === answer) {
+      clearDemoTimer();
+      checkAutoCorrect();
+      return;
+    }
+    if (!answer.startsWith(current)) {
+      clearDemoTimer();
+      els.demoStatus.textContent = "手入力を優先";
+      return;
+    }
+    const now = performance.now();
+    const elapsed = Math.max(0, now - game.startTime);
+    const nextBeatIndex = Math.max(1, Math.floor(elapsed / beatMs) + 1);
+    const targetTime = game.startTime + nextBeatIndex * beatMs;
+    const delay = Math.max(0, targetTime - now);
+    state.demoTimerId = window.setTimeout(() => {
+      if (!state.game || state.game !== game || !game.running || !game.current || !game.demoEnabled) {
+        clearDemoTimer();
+        return;
+      }
+      const latest = els.answerInput.value;
+      if (latest === answer) {
+        clearDemoTimer();
+        checkAutoCorrect();
+        return;
+      }
+      if (!answer.startsWith(latest)) {
+        clearDemoTimer();
+        els.demoStatus.textContent = "手入力を優先";
+        return;
+      }
+      const nextChar = answer.charAt(latest.length);
+      els.answerInput.value = latest + nextChar;
+      updateInputMirror();
+      recordTypedKey(nextChar, performance.now());
+      playKeySound();
+      checkAutoCorrect();
+      scheduleNext();
+    }, delay);
+  };
+  scheduleNext();
 }
 
 function getDemoDurationMs(game, answer) {
@@ -1316,7 +1452,13 @@ function playTone(frequency, duration, type, gainScale, delay = 0) {
   oscillator.stop(start + duration + 0.02);
 }
 
-function getRank(score) {
+function getRank(score, scoreType = "typing") {
+  if (scoreType === "quiz") {
+    if (score >= 100) return "S";
+    if (score >= 80) return "A";
+    if (score >= 60) return "B";
+    return "C";
+  }
   if (score >= 8500) return "S";
   if (score >= 6000) return "A";
   if (score >= 3000) return "B";
@@ -1344,6 +1486,11 @@ function getSpeedPower(secondsPerChar, cpm) {
 
 function getScoreRate(score) {
   return clamp(score / 100, 0, 100);
+}
+
+function getScoreType(gameType) {
+  if (gameType === "timeAttack") return "timeAttack";
+  return els.commaModeSelect.value === "answer" ? "quiz" : "typing";
 }
 
 function getRhythmBpm() {

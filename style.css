@@ -431,7 +431,7 @@ input[type="number"] {
 
 .question-card {
   display: grid;
-  grid-template-rows: 18px minmax(0, 1fr) 34px;
+  grid-template-rows: 18px minmax(0, 1fr) minmax(26px, auto);
   align-items: center;
   gap: 4px;
 }
@@ -446,8 +446,20 @@ input[type="number"] {
   overflow-wrap: anywhere;
 }
 
+.question-text.long-text {
+  font-size: clamp(28px, 3.4vw, 48px);
+  line-height: 1.12;
+}
+
+.question-text.very-long-text {
+  font-size: clamp(20px, 2.3vw, 34px);
+  line-height: 1.18;
+  align-content: center;
+}
+
 .question-sub {
-  height: 34px;
+  min-height: 26px;
+  max-height: 46px;
   text-align: center;
   color: #e5e9f3;
   font-size: clamp(16px, 1.8vw, 24px);
@@ -458,12 +470,30 @@ input[type="number"] {
   align-self: start;
 }
 
+.question-sub.long-text {
+  font-size: clamp(13px, 1.25vw, 18px);
+}
+
+.question-sub.very-long-text {
+  white-space: normal;
+  font-size: clamp(11px, 1vw, 15px);
+  line-height: 1.15;
+}
+
 #answerInput {
   height: 56px;
   margin-top: 8px;
   padding: 6px 12px;
   font-family: Consolas, "Courier New", monospace;
   font-size: clamp(30px, 4vw, 52px);
+}
+
+#answerInput.long-answer {
+  font-size: clamp(22px, 2.8vw, 36px);
+}
+
+#answerInput.very-long-answer {
+  font-size: clamp(16px, 2vw, 26px);
 }
 
 .input-mirror {
@@ -480,6 +510,14 @@ input[type="number"] {
   font-family: Consolas, "Courier New", monospace;
   font-size: 18px;
   line-height: 20px;
+}
+
+.input-mirror.long-answer {
+  font-size: 15px;
+}
+
+.input-mirror.very-long-answer {
+  font-size: 12px;
 }
 
 .input-mirror:empty::before {
@@ -749,7 +787,7 @@ h2 {
 
 .ranking-card {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .card-head {
@@ -775,6 +813,29 @@ h2 {
 .ranking-list {
   padding-left: 0;
   list-style: none;
+}
+
+.ranking-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.ranking-tab {
+  min-width: 0;
+  height: 24px;
+  border: 1px solid #35445f;
+  border-radius: 5px;
+  background: #111a29;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ranking-tab.active {
+  background: linear-gradient(180deg, #2f7dff, #1854c8);
+  color: var(--text);
 }
 
 .miss-list li,
