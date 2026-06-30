@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel Typing Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="top-bar">
+      <section class="top-card stage-card">
+        <span class="mini-label">ステージ</span>
+        <strong id="stageTitle">未読込</strong>
+        <span>問題 <b id="currentIndex">0</b> / <b id="targetCount">0</b> <b id="versionBadge" class="version-badge">v2.1</b></span>
+      </section>
+
+      <section class="top-card progress-card">
+        <div class="progress-head">
+          <strong>絵を完成させよう！</strong>
+          <span>正解 <b id="correctCount">0</b> / ミス <b id="missCount">0</b> / スコア <b id="liveScore">0</b></span>
+        </div>
+        <div id="progressTiles" class="progress-tiles"></div>
+        <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+      </section>
+
+      <section class="top-card quick-settings">
+        <label>
+          <span>制限秒</span>
+          <input id="timeLimitInput" type="number" min="1" max="999" step="1" value="10">
+        </label>
+        <label class="custom-time">
+          <span>なし</span>
+          <input id="noTimeLimitToggle" type="checkbox">
+        </label>
+      </section>
+
+      <button id="startBtn" class="button primary-button" type="button">ゲーム開始</button>
+      <button id="mobilePlayBtn" class="button secondary-button" type="button">スマホ</button>
+      <button id="abortBtn" class="button danger-button" type="button">中止</button>
+    </header>
+
+    <section class="game-grid">
+      <aside class="side-panel">
+        <section class="control-block">
+          <div class="block-title">問題</div>
+          <label class="file-button">
+            フォルダ選択
+            <input id="folderInput" type="file" accept=".txt" webkitdirectory multiple>
+          </label>
+          <label class="compact-label">
+            <span>ファイル</span>
+            <select id="fileSelect">
+              <option value="all">全ファイル</option>
+            </select>
+          </label>
+          <textarea id="pasteArea" class="paste-area" rows="4" placeholder="タイトル&#10;問題1&#10;曲名,アーティスト名"></textarea>
+          <button id="loadPasteBtn" class="button secondary-button" type="button">貼り付け読込</button>
+        </section>
+
+        <section class="control-block player-block">
+          <div class="block-title">Player / Sample</div>
+          <label class="compact-label">
+            <span>プレイヤー</span>
+            <input id="playerNameInput" type="text" maxlength="24" placeholder="Guest">
+          </label>
+          <label class="compact-label">
+            <span>サンプル</span>
+            <select id="sampleSelect">
+              <option value="">選択してください</option>
+            </select>
+          </label>
+          <button id="loadSampleBtn" class="button secondary-button" type="button">サンプル読込</button>
+        </section>
+
+        <section class="control-block compact-grid">
+          <label>
+            <span>種別</span>
+            <select id="gameTypeSelect">
+              <option value="normal" selected>通常</option>
+              <option value="timeAttack">タイムアタック</option>
+            </select>
+          </label>
+          <label>
+            <span>回数</span>
+            <select id="questionCountSelect">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+              <option value="all">全問</option>
+            </select>
+          </label>
+          <label>
+            <span>モード</span>
+            <select id="modeSelect">
+              <option value="random" selected>ランダム</option>
+              <option value="order">順番</option>
+            </select>
+          </label>
+          <label>
+            <span>カンマ</span>
+            <select id="commaModeSelect">
+              <option value="answer" selected>問題,答え</option>
+              <option value="music">音楽</option>
+              <option value="sub">問題,サブ</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">画像</div>
+          <label class="file-button">
+            画像選択
+            <input id="imageInput" type="file" accept="image/jpeg,image/png" multiple>
+          </label>
+          <label class="compact-label">
+            <span>表示</span>
+            <select id="imageModeSelect">
+              <option value="puzzle" selected>パズル</option>
+              <option value="wallpaper">壁紙</option>
+              <option value="slideshow">スライドショー</option>
+            </select>
+          </label>
+          <button id="resetPuzzleBtn" class="button secondary-button reset-puzzle-button" type="button">パズルリセット</button>
+          <div id="imageFileName" class="small-text">未選択</div>
+        </section>
+
+        <section class="control-block sound-block">
+          <label><span>音量</span><input id="volumeInput" type="range" min="0" max="1" step="0.01" value="0.35"></label>
+          <label><input id="soundToggle" type="checkbox" checked> 効果音</label>
+          <label><input id="keySoundToggle" type="checkbox" checked> キー</label>
+          <label><input id="correctSoundToggle" type="checkbox" checked> 正解</label>
+          <label><input id="missSoundToggle" type="checkbox" checked> ミス</label>
+        </section>
+
+        <section class="control-block rhythm-block">
+          <div class="block-title">リズム</div>
+          <div class="rhythm-row">
+            <label><input id="rhythmToggle" type="checkbox"> 加点</label>
+            <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="300" step="1" value="100"></label>
+          </div>
+          <div class="metronome-line">
+            <span id="metronomeLight" class="metronome-light"></span>
+            <b id="rhythmJudge">Ready</b>
+          </div>
+          <div id="rhythmStatus" class="small-text">拍に合うと加点</div>
+        </section>
+
+        <section class="control-block demo-block">
+          <div class="block-title">デモ</div>
+          <label><input id="demoToggle" type="checkbox"> デモ入力</label>
+          <div id="demoStatus" class="small-text">制限時間の80%で入力</div>
+        </section>
+
+        <section class="control-block backlog-block">
+          <div class="block-title">保留項目</div>
+          <ul class="backlog-list">
+            <li>デモモード</li>
+            <li>高得点モード</li>
+            <li>残り1/3警告音</li>
+            <li>問題別成績</li>
+            <li>難易度別スコア補正</li>
+            <li>正解表示時間設定</li>
+            <li>CSV/列形式インポート</li>
+            <li>スマートフォン用プレイ画面</li>
+            <li>サンプリングSE</li>
+            <li>BGM</li>
+            <li>オンライン共有用サンプル拡充</li>
+          </ul>
+        </section>
+      </aside>
+
+      <section class="typing-panel">
+        <div class="timer-line">
+          <span>TIME</span>
+          <strong id="timerValue">--</strong>
+          <div class="timer-gauge"><div id="timerFill"></div></div>
+        </div>
+        <article class="question-card">
+          <div id="countdownOverlay" class="countdown hidden">3</div>
+          <span class="mini-label">問題</span>
+          <div id="scorePop" class="score-pop hidden"></div>
+          <div id="questionText" class="question-text">問題を読み込んでください</div>
+          <div id="questionSub" class="question-sub">曲名,アーティスト名 形式ではアーティスト名を表示</div>
+        </article>
+        <article class="answer-card">
+          <span class="mini-label">入力</span>
+          <input id="answerInput" type="text" autocomplete="off" spellcheck="false" disabled>
+          <div id="inputMirror" class="input-mirror" aria-hidden="true"></div>
+          <div class="answer-actions">
+            <button id="judgeBtn" class="button secondary-button" type="button" disabled>判定</button>
+            <button id="skipBtn" class="button ghost-button" type="button" disabled>ミス</button>
+          </div>
+        </article>
+        <article class="feedback-card">
+          <strong id="feedbackText">待機中</strong>
+          <span id="feedbackSub">準備ができたら開始</span>
+        </article>
+      </section>
+
+      <section class="image-panel">
+        <div id="panelBoard" class="panel-board">
+          <div class="image-placeholder">IMAGE</div>
+        </div>
+      </section>
+    </section>
+
+    <footer class="bottom-bar">
+      <section class="result-card">
+        <h2>成績</h2>
+        <div class="stats-grid">
+          <div><span>正解</span><b id="resultCorrect">0</b></div>
+          <div><span>ミス</span><b id="resultMiss">0</b></div>
+          <div><span>率</span><b id="resultAccuracy">0%</b></div>
+          <div><span>時間</span><b id="resultTime">00:00</b></div>
+          <div><span>平均</span><b id="resultAverage">0.0s</b></div>
+          <div><span>WPM</span><b id="resultWpm">0.0</b></div>
+          <div><span>CPM</span><b id="resultCpm">0.0</b></div>
+          <div><span>点</span><b id="resultScore">0</b></div>
+        </div>
+      </section>
+
+      <section class="rank-card">
+        <h2>ランク</h2>
+        <strong id="rankValue">-</strong>
+        <b id="rankScore" class="rank-score-large">0</b>
+        <span id="rankStars">---</span>
+      </section>
+
+      <section class="analysis-card">
+        <div class="card-head"><h2>分析</h2><span id="rhythmResult">リズム 0</span></div>
+        <div class="analysis-grid">
+          <div><span>平均打鍵</span><b id="resultKeyAverage">0ms</b></div>
+          <div><span>コメント</span><b id="analysisComment">待機中</b></div>
+        </div>
+        <div class="analysis-lists">
+          <p><span>速いキー</span><b id="fastKeys">-</b></p>
+          <p><span>遅いキー</span><b id="slowKeys">-</b></p>
+          <p><span>得意</span><b id="strongWords">-</b></p>
+          <p><span>不得意</span><b id="weakWords">-</b></p>
+        </div>
+      </section>
+
+      <section class="miss-card">
+        <div class="card-head"><h2>ミス <span id="missSummary">0件</span></h2></div>
+        <ol id="missList" class="miss-list"></ol>
+        <div class="mini-actions">
+          <button id="retryMissBtn" class="button secondary-button" type="button" disabled>再挑戦</button>
+          <button id="copyMissBtn" class="button secondary-button" type="button" disabled>コピー</button>
+          <button id="saveMissBtn" class="button secondary-button" type="button" disabled>保存</button>
+        </div>
+      </section>
+
+      <section class="ranking-card">
+        <div class="card-head">
+          <h2>ランキング</h2>
+          <button id="clearHistoryBtn" class="mini-button" type="button">クリア</button>
+        </div>
+        <div id="rankingTabs" class="ranking-tabs" role="group" aria-label="ランキング種別">
+          <button class="ranking-tab active" type="button" data-score-type="typing">タイピング</button>
+          <button class="ranking-tab" type="button" data-score-type="quiz">クイズ</button>
+          <button class="ranking-tab" type="button" data-score-type="timeAttack">TA</button>
+        </div>
+        <label class="ranking-filter">
+          <input id="sameConditionToggle" type="checkbox">
+          <span>同条件</span>
+        </label>
+        <ol id="rankingList" class="ranking-list"></ol>
+      </section>
+    </footer>
+  </main>
+
+  <main id="mobilePlayShell" class="mobile-play-shell hidden">
+    <header class="mobile-head">
+      <button id="mobileBackBtn" class="mini-button" type="button">PC設定</button>
+      <div>
+        <span id="mobileVersion" class="mobile-version">v2.1</span>
+        <strong id="mobileStageTitle">未読込</strong>
+      </div>
+    </header>
+
+    <section class="mobile-status">
+      <div><span>問題</span><b><span id="mobileCurrentIndex">0</span>/<span id="mobileTargetCount">0</span></b></div>
+      <div><span>正解</span><b id="mobileCorrectCount">0</b></div>
+      <div><span>ミス</span><b id="mobileMissCount">0</b></div>
+      <div><span>TIME</span><b id="mobileTimerValue">--</b></div>
+    </section>
+
+    <section class="mobile-play-card">
+      <div id="mobileCountdown" class="mobile-countdown hidden">3</div>
+      <div id="mobileQuestionText" class="mobile-question-text">問題を読み込んでください</div>
+      <div id="mobileQuestionSub" class="mobile-question-sub"></div>
+      <input id="mobileAnswerInput" class="mobile-answer-input" type="text" autocomplete="off" spellcheck="false" disabled>
+      <div id="mobileInputMirror" class="mobile-input-mirror"></div>
+      <div class="mobile-actions">
+        <button id="mobileStartBtn" class="button primary-button" type="button">スタート</button>
+        <button id="mobileAbortBtn" class="button danger-button" type="button">中止</button>
+      </div>
+      <div class="mobile-feedback">
+        <strong id="mobileFeedbackText">待機中</strong>
+        <span id="mobileFeedbackSub">PC設定の問題を使ってプレイします</span>
+      </div>
+    </section>
+
+    <section class="mobile-score-card">
+      <div><span>Score</span><b id="mobileLiveScore">0</b></div>
+      <div><span>Rank</span><b id="mobileRankValue">-</b></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
