@@ -12,7 +12,7 @@
       <section class="top-card stage-card">
         <span class="mini-label">ステージ</span>
         <strong id="stageTitle">未読込</strong>
-        <span>問題 <b id="currentIndex">0</b> / <b id="targetCount">0</b></span>
+        <span>問題 <b id="currentIndex">0</b> / <b id="targetCount">0</b> <b id="versionBadge" class="version-badge">v2.1</b></span>
       </section>
 
       <section class="top-card progress-card">
@@ -57,6 +57,21 @@
           <button id="loadPasteBtn" class="button secondary-button" type="button">貼り付け読込</button>
         </section>
 
+        <section class="control-block player-block">
+          <div class="block-title">Player / Sample</div>
+          <label class="compact-label">
+            <span>プレイヤー</span>
+            <input id="playerNameInput" type="text" maxlength="24" placeholder="Guest">
+          </label>
+          <label class="compact-label">
+            <span>サンプル</span>
+            <select id="sampleSelect">
+              <option value="">選択してください</option>
+            </select>
+          </label>
+          <button id="loadSampleBtn" class="button secondary-button" type="button">サンプル読込</button>
+        </section>
+
         <section class="control-block compact-grid">
           <label>
             <span>種別</span>
@@ -96,7 +111,15 @@
           <div class="block-title">画像</div>
           <label class="file-button">
             画像選択
-            <input id="imageInput" type="file" accept="image/jpeg,image/png">
+            <input id="imageInput" type="file" accept="image/jpeg,image/png" multiple>
+          </label>
+          <label class="compact-label">
+            <span>表示</span>
+            <select id="imageModeSelect">
+              <option value="puzzle" selected>パズル</option>
+              <option value="wallpaper">壁紙</option>
+              <option value="slideshow">スライドショー</option>
+            </select>
           </label>
           <button id="resetPuzzleBtn" class="button secondary-button reset-puzzle-button" type="button">パズルリセット</button>
           <div id="imageFileName" class="small-text">未選択</div>
@@ -114,7 +137,11 @@
           <div class="block-title">リズム</div>
           <div class="rhythm-row">
             <label><input id="rhythmToggle" type="checkbox"> 加点</label>
-            <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="240" step="1" value="100"></label>
+            <label><span>BPM</span><input id="rhythmBpmInput" type="number" min="40" max="300" step="1" value="100"></label>
+          </div>
+          <div class="metronome-line">
+            <span id="metronomeLight" class="metronome-light"></span>
+            <b id="rhythmJudge">Ready</b>
           </div>
           <div id="rhythmStatus" class="small-text">拍に合うと加点</div>
         </section>
@@ -136,6 +163,9 @@
             <li>正解表示時間設定</li>
             <li>CSV/列形式インポート</li>
             <li>スマートフォン用プレイ画面</li>
+            <li>サンプリングSE</li>
+            <li>BGM</li>
+            <li>オンライン共有用サンプル拡充</li>
           </ul>
         </section>
       </aside>
@@ -149,6 +179,7 @@
         <article class="question-card">
           <div id="countdownOverlay" class="countdown hidden">3</div>
           <span class="mini-label">問題</span>
+          <div id="scorePop" class="score-pop hidden"></div>
           <div id="questionText" class="question-text">問題を読み込んでください</div>
           <div id="questionSub" class="question-sub">曲名,アーティスト名 形式ではアーティスト名を表示</div>
         </article>
@@ -230,6 +261,10 @@
           <button class="ranking-tab" type="button" data-score-type="quiz">クイズ</button>
           <button class="ranking-tab" type="button" data-score-type="timeAttack">TA</button>
         </div>
+        <label class="ranking-filter">
+          <input id="sameConditionToggle" type="checkbox">
+          <span>同条件</span>
+        </label>
         <ol id="rankingList" class="ranking-list"></ol>
       </section>
     </footer>
