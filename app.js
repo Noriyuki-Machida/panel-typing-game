@@ -151,6 +151,7 @@ const state = {
   slideshowIndex: 0,
   rankingFilter: "typing",
   viewMode: "desktop",
+  mobileInputLocked: false,
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -237,15 +238,27 @@ els.mobileAnswerInput.addEventListener("compositionstart", () => {
 });
 els.mobileAnswerInput.addEventListener("compositionend", () => {
   state.composing = false;
+  if (state.mobileInputLocked) {
+    resetMobileInputToMain();
+    return;
+  }
   syncMobileInputToMain();
   checkAutoCorrect();
 });
 els.mobileAnswerInput.addEventListener("input", () => {
+  if (state.mobileInputLocked) {
+    resetMobileInputToMain();
+    return;
+  }
   syncMobileInputToMain();
   playKeySound();
   checkAutoCorrect();
 });
 els.mobileAnswerInput.addEventListener("keydown", (event) => {
+  if (state.mobileInputLocked) {
+    event.preventDefault();
+    return;
+  }
   recordKeydown(event);
   if (event.key === "Enter") {
     event.preventDefault();
@@ -763,9 +776,10 @@ function nextQuestion() {
   els.mobileQuestionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
   els.mobileAnswerInput.value = "";
+  setMobileInputLocked(false);
   applyTextLengthClasses(game.current);
   updateInputMirror();
-  (isMobileView() ? els.mobileAnswerInput : els.answerInput).focus();
+  focusPlayInput();
   if (game.gameType === "timeAttack") {
     updateTimeAttackTimerReadout();
   } else {
@@ -803,6 +817,27 @@ function updateInputMirror() {
 function syncMobileInputToMain() {
   els.answerInput.value = els.mobileAnswerInput.value;
   updateInputMirror();
+}
+
+function resetMobileInputToMain() {
+  els.mobileAnswerInput.value = els.answerInput.value || "";
+  updateInputMirror();
+}
+
+function focusPlayInput() {
+  const input = isMobileView() ? els.mobileAnswerInput : els.answerInput;
+  window.setTimeout(() => {
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
+  }, 0);
+}
+
+function setMobileInputLocked(locked) {
+  state.mobileInputLocked = Boolean(locked);
+  els.mobileAnswerInput.readOnly = Boolean(locked);
 }
 
 function applyTextLengthClasses(question) {
@@ -892,13 +927,22 @@ function missCurrentQuestion(reason) {
   game.missed.set(game.current.raw, game.current);
   recordWordResult(game, game.current, false, performance.now() - game.questionStartTime);
   playMissSound();
-  setInputsEnabled(false);
+  if (isMobileView()) {
+    setMobileInputLocked(true);
+    focusPlayInput();
+  } else {
+    setInputsEnabled(false);
+  }
   setFeedback(`正解: ${game.current.answer}`, reason === "時間切れ" ? "時間切れ" : "不正解", true);
   updateAllStats();
   clearTransitionTimer();
   state.transitionId = window.setTimeout(() => {
     if (state.game === game && game.running) {
-      setInputsEnabled(true);
+      if (isMobileView()) {
+        setMobileInputLocked(false);
+      } else {
+        setInputsEnabled(true);
+      }
       nextQuestion();
     }
   }, 900);
@@ -1568,7 +1612,13 @@ function buildConditionKey(scoreType = state.rankingFilter || "typing") {
 
 function setInputsEnabled(enabled) {
   els.answerInput.disabled = !enabled;
-  els.mobileAnswerInput.disabled = !enabled;
+  if (isMobileView()) {
+    els.mobileAnswerInput.disabled = false;
+    els.mobileAnswerInput.readOnly = !enabled || state.mobileInputLocked;
+  } else {
+    els.mobileAnswerInput.disabled = !enabled;
+    els.mobileAnswerInput.readOnly = false;
+  }
   els.judgeBtn.disabled = !enabled;
   els.skipBtn.disabled = !enabled;
 }
