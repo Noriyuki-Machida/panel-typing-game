@@ -3,10 +3,36 @@
 const STORAGE_SETTINGS = "panelTypingGame.settings.v2";
 const STORAGE_HISTORY = "panelTypingGame.history.v2";
 const STORAGE_REVEAL = "panelTypingGame.reveal.v1";
+const STORAGE_PROBLEMS = "panelTypingGame.problems.v2";
 const BOARD_PANEL_COUNT = 96;
+const APP_VERSION = "v2.1";
+const SAMPLE_PROBLEMS = [
+  {
+    id: "english",
+    name: "英単語",
+    title: "英単語サンプル",
+    mode: "typing",
+    lines: ["guitar", "keyboard", "rhythm", "melody", "harmony", "studio"]
+  },
+  {
+    id: "math",
+    name: "計算クイズ",
+    title: "計算クイズサンプル",
+    mode: "quiz",
+    lines: ["1+1,2", "3+4,7", "9-5,4", "6*3,18", "12/4,3"]
+  },
+  {
+    id: "music",
+    name: "音楽問題",
+    title: "音楽サンプル",
+    mode: "music",
+    lines: ["Imagine,John Lennon", "Let It Be,The Beatles", "Purple Haze,Jimi Hendrix", "Respect,Aretha Franklin"]
+  }
+];
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  versionBadge: $("versionBadge"),
   stageTitle: $("stageTitle"),
   currentIndex: $("currentIndex"),
   targetCount: $("targetCount"),
@@ -18,16 +44,41 @@ const els = {
   timeLimitInput: $("timeLimitInput"),
   noTimeLimitToggle: $("noTimeLimitToggle"),
   startBtn: $("startBtn"),
+  mobilePlayBtn: $("mobilePlayBtn"),
   abortBtn: $("abortBtn"),
+  mobilePlayShell: $("mobilePlayShell"),
+  mobileBackBtn: $("mobileBackBtn"),
+  mobileVersion: $("mobileVersion"),
+  mobileStageTitle: $("mobileStageTitle"),
+  mobileCurrentIndex: $("mobileCurrentIndex"),
+  mobileTargetCount: $("mobileTargetCount"),
+  mobileCorrectCount: $("mobileCorrectCount"),
+  mobileMissCount: $("mobileMissCount"),
+  mobileTimerValue: $("mobileTimerValue"),
+  mobileCountdown: $("mobileCountdown"),
+  mobileQuestionText: $("mobileQuestionText"),
+  mobileQuestionSub: $("mobileQuestionSub"),
+  mobileAnswerInput: $("mobileAnswerInput"),
+  mobileInputMirror: $("mobileInputMirror"),
+  mobileStartBtn: $("mobileStartBtn"),
+  mobileAbortBtn: $("mobileAbortBtn"),
+  mobileFeedbackText: $("mobileFeedbackText"),
+  mobileFeedbackSub: $("mobileFeedbackSub"),
+  mobileLiveScore: $("mobileLiveScore"),
+  mobileRankValue: $("mobileRankValue"),
   folderInput: $("folderInput"),
   fileSelect: $("fileSelect"),
   pasteArea: $("pasteArea"),
   loadPasteBtn: $("loadPasteBtn"),
+  playerNameInput: $("playerNameInput"),
+  sampleSelect: $("sampleSelect"),
+  loadSampleBtn: $("loadSampleBtn"),
   gameTypeSelect: $("gameTypeSelect"),
   questionCountSelect: $("questionCountSelect"),
   modeSelect: $("modeSelect"),
   commaModeSelect: $("commaModeSelect"),
   imageInput: $("imageInput"),
+  imageModeSelect: $("imageModeSelect"),
   resetPuzzleBtn: $("resetPuzzleBtn"),
   imageFileName: $("imageFileName"),
   volumeInput: $("volumeInput"),
@@ -37,6 +88,8 @@ const els = {
   missSoundToggle: $("missSoundToggle"),
   rhythmToggle: $("rhythmToggle"),
   rhythmBpmInput: $("rhythmBpmInput"),
+  metronomeLight: $("metronomeLight"),
+  rhythmJudge: $("rhythmJudge"),
   rhythmStatus: $("rhythmStatus"),
   demoToggle: $("demoToggle"),
   demoStatus: $("demoStatus"),
@@ -51,6 +104,7 @@ const els = {
   skipBtn: $("skipBtn"),
   feedbackText: $("feedbackText"),
   feedbackSub: $("feedbackSub"),
+  scorePop: $("scorePop"),
   panelBoard: $("panelBoard"),
   resultCorrect: $("resultCorrect"),
   resultMiss: $("resultMiss"),
@@ -76,11 +130,14 @@ const els = {
   copyMissBtn: $("copyMissBtn"),
   saveMissBtn: $("saveMissBtn"),
   clearHistoryBtn: $("clearHistoryBtn"),
+  rankingTabs: $("rankingTabs"),
+  sameConditionToggle: $("sameConditionToggle"),
   rankingList: $("rankingList")
 };
 
 const state = {
   files: [],
+  imageUrls: [],
   imageUrl: "",
   imageName: "",
   imageFit: "cover",
@@ -90,6 +147,10 @@ const state = {
   transitionId: 0,
   rhythmTimerId: 0,
   demoTimerId: 0,
+  slideshowTimerId: 0,
+  slideshowIndex: 0,
+  rankingFilter: "typing",
+  viewMode: "desktop",
   audioContext: null,
   composing: false,
   settings: loadJson(STORAGE_SETTINGS, {}),
@@ -98,31 +159,57 @@ const state = {
 };
 
 applySettings();
+els.versionBadge.textContent = APP_VERSION;
+els.mobileVersion.textContent = APP_VERSION;
+restoreSavedProblems();
+renderSampleSelect();
 renderFileSelect();
 renderPanels(0);
 renderHistory();
 updateTimeLimitControls();
 updateAllStats();
+syncViewFromHash();
 
 els.folderInput.addEventListener("change", handleFolderInput);
 els.fileSelect.addEventListener("change", () => {
+  applySelectedFileMode();
   persistSettings();
   updateAllStats();
 });
 els.loadPasteBtn.addEventListener("click", handlePasteLoad);
+els.loadSampleBtn.addEventListener("click", handleSampleLoad);
+els.playerNameInput.addEventListener("change", () => {
+  persistSettings();
+  renderHistory();
+});
 els.imageInput.addEventListener("change", handleImageInput);
 els.resetPuzzleBtn.addEventListener("click", resetPuzzle);
+els.mobilePlayBtn.addEventListener("click", () => switchViewMode("mobile"));
+els.mobileBackBtn.addEventListener("click", () => switchViewMode("desktop"));
 els.startBtn.addEventListener("click", () => {
   unlockAudio();
   startGame();
 });
+els.mobileStartBtn.addEventListener("click", () => {
+  unlockAudio();
+  ensureMobileProblems();
+  startGame();
+});
 els.abortBtn.addEventListener("click", abortGame);
+els.mobileAbortBtn.addEventListener("click", abortGame);
 els.judgeBtn.addEventListener("click", judgeCurrentAnswer);
 els.skipBtn.addEventListener("click", () => missCurrentQuestion("ミス"));
 els.retryMissBtn.addEventListener("click", retryMissQuestions);
 els.copyMissBtn.addEventListener("click", copyMissQuestions);
 els.saveMissBtn.addEventListener("click", saveMissQuestions);
 els.clearHistoryBtn.addEventListener("click", clearHistory);
+els.sameConditionToggle.addEventListener("change", renderHistory);
+els.rankingTabs.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-score-type]");
+  if (!button) return;
+  state.rankingFilter = button.dataset.scoreType;
+  renderHistory();
+});
 
 els.answerInput.addEventListener("compositionstart", () => {
   state.composing = true;
@@ -145,11 +232,35 @@ els.answerInput.addEventListener("keydown", (event) => {
   }
 });
 
+els.mobileAnswerInput.addEventListener("compositionstart", () => {
+  state.composing = true;
+});
+els.mobileAnswerInput.addEventListener("compositionend", () => {
+  state.composing = false;
+  syncMobileInputToMain();
+  checkAutoCorrect();
+});
+els.mobileAnswerInput.addEventListener("input", () => {
+  syncMobileInputToMain();
+  playKeySound();
+  checkAutoCorrect();
+});
+els.mobileAnswerInput.addEventListener("keydown", (event) => {
+  recordKeydown(event);
+  if (event.key === "Enter") {
+    event.preventDefault();
+    judgeCurrentAnswer();
+  }
+});
+
+window.addEventListener("hashchange", syncViewFromHash);
+
 [
   els.gameTypeSelect,
   els.questionCountSelect,
   els.modeSelect,
   els.commaModeSelect,
+  els.imageModeSelect,
   els.timeLimitInput,
   els.noTimeLimitToggle,
   els.volumeInput,
@@ -194,6 +305,12 @@ els.answerInput.addEventListener("keydown", (event) => {
         startRhythmLoop();
       }
     }
+    if (control === els.imageModeSelect) {
+      stopSlideshow();
+      renderPanels(state.game ? state.game.panelCount : getPreviewPanelCount());
+      startSlideshow();
+      renderHistory();
+    }
   });
   control.addEventListener("input", persistSettings);
 });
@@ -201,7 +318,7 @@ els.answerInput.addEventListener("keydown", (event) => {
 function reparseLoadedQuestions() {
   for (const file of state.files) {
     file.questions = file.questions.map((question) => ({
-      ...parseQuestionLine(question.raw),
+      ...parseQuestionLine(question.raw, file.mode),
       fileName: question.fileName,
       sourceTitle: question.sourceTitle
     }));
@@ -221,6 +338,7 @@ async function handleFolderInput(event) {
         id: makeId(),
         name: file.name,
         title: entry.title,
+        mode: entry.mode,
         questions: entry.questions.map((question) => ({
           ...question,
           fileName: file.name,
@@ -231,6 +349,7 @@ async function handleFolderInput(event) {
   }
 
   state.files = parsed;
+  persistProblems();
   renderFileSelect();
   updateAllStats();
   setFeedback(parsed.length ? "読み込み完了" : "問題なし", parsed.length ? `${parsed.length}ファイル` : "2行目以降に問題を書いてください", !parsed.length);
@@ -248,6 +367,7 @@ function handlePasteLoad() {
     id: makeId(),
     name,
     title: entry.title,
+    mode: entry.mode,
     questions: entry.questions.map((question) => ({
       ...question,
       fileName: name,
@@ -255,28 +375,161 @@ function handlePasteLoad() {
     }))
   };
   state.files.push(file);
+  persistProblems();
   els.fileSelect.value = file.id;
   renderFileSelect(file.id);
   updateAllStats();
   setFeedback("貼り付け読込", `${entry.questions.length}問`, false);
 }
 
-function handleImageInput(event) {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
-  if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
-  resetPuzzleState();
-  state.imageUrl = URL.createObjectURL(file);
-  state.imageName = file.name;
-  els.imageFileName.textContent = file.name;
-  const probe = new Image();
-  probe.onload = () => {
-    state.imageFit = probe.naturalHeight > probe.naturalWidth ? "contain" : "cover";
-    renderPanels(BOARD_PANEL_COUNT);
+function renderSampleSelect() {
+  els.sampleSelect.innerHTML = "";
+  els.sampleSelect.appendChild(new Option("選択してください", ""));
+  for (const sample of SAMPLE_PROBLEMS) {
+    els.sampleSelect.appendChild(new Option(sample.name, sample.id));
+  }
+}
+
+function serializeProblems() {
+  return state.files.map((file) => ({
+    id: file.id,
+    name: file.name,
+    title: file.title,
+    mode: file.mode || "",
+    questions: file.questions.map((question) => ({
+      raw: question.raw,
+      fileName: question.fileName,
+      sourceTitle: question.sourceTitle
+    }))
+  }));
+}
+
+function persistProblems() {
+  localStorage.setItem(STORAGE_PROBLEMS, JSON.stringify(serializeProblems()));
+}
+
+function restoreSavedProblems() {
+  const saved = loadJson(STORAGE_PROBLEMS, []);
+  if (!Array.isArray(saved) || !saved.length) return;
+  state.files = saved
+    .map((file) => {
+      const mode = normalizeProblemMode(file.mode);
+      const questions = Array.isArray(file.questions) ? file.questions : [];
+      return {
+        id: file.id || makeId(),
+        name: file.name || "saved.txt",
+        title: file.title || "保存済み問題",
+        mode,
+        questions: questions
+          .map((question) => ({
+            ...parseQuestionLine(question.raw || "", mode),
+            fileName: question.fileName || file.name || "saved.txt",
+            sourceTitle: question.sourceTitle || file.title || "保存済み問題"
+          }))
+          .filter((question) => question.answer)
+      };
+    })
+    .filter((file) => file.questions.length);
+}
+
+function ensureMobileProblems() {
+  if (state.files.length) return;
+  const sample = SAMPLE_PROBLEMS[0];
+  const text = [`#mode=${sample.mode}`, sample.title, ...sample.lines].join("\n");
+  const entry = parseProblemText(text, `${sample.name}.txt`);
+  state.files = [{
+    id: makeId(),
+    name: `${sample.name}.sample`,
+    title: entry.title,
+    mode: entry.mode,
+    questions: entry.questions.map((question) => ({
+      ...question,
+      fileName: `${sample.name}.sample`,
+      sourceTitle: entry.title
+    }))
+  }];
+  renderFileSelect(state.files[0].id);
+  els.fileSelect.value = state.files[0].id;
+  persistProblems();
+  updateAllStats();
+}
+
+function handleSampleLoad() {
+  const sample = SAMPLE_PROBLEMS.find((item) => item.id === els.sampleSelect.value) || SAMPLE_PROBLEMS[0];
+  if (!sample) return;
+  const text = [`#mode=${sample.mode}`, sample.title, ...sample.lines].join("\n");
+  const entry = parseProblemText(text, `${sample.name}.txt`);
+  const file = {
+    id: makeId(),
+    name: `${sample.name}.sample`,
+    title: entry.title,
+    mode: entry.mode,
+    questions: entry.questions.map((question) => ({
+      ...question,
+      fileName: `${sample.name}.sample`,
+      sourceTitle: entry.title
+    }))
   };
-  probe.src = state.imageUrl;
+  state.files.push(file);
+  persistProblems();
+  renderFileSelect(file.id);
+  els.fileSelect.value = file.id;
+  applySelectedFileMode();
+  updateAllStats();
+  setFeedback("サンプル読込", `${sample.name} / ${entry.questions.length}問`, false);
+}
+
+function switchViewMode(mode) {
+  state.viewMode = mode === "mobile" ? "mobile" : "desktop";
+  document.body.classList.toggle("mobile-play-active", state.viewMode === "mobile");
+  els.mobilePlayShell.classList.toggle("hidden", state.viewMode !== "mobile");
+  if (state.viewMode === "mobile") {
+    ensureMobileProblems();
+    if (location.hash !== "#play") history.replaceState(null, "", "#play");
+  } else if (location.hash === "#play") {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  syncMobileView();
+}
+
+function syncViewFromHash() {
+  switchViewMode(location.hash === "#play" ? "mobile" : "desktop");
+}
+
+function isMobileView() {
+  return state.viewMode === "mobile";
+}
+
+function handleImageInput(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  stopSlideshow();
+  for (const item of state.imageUrls) URL.revokeObjectURL(item.url);
+  state.imageUrls = [];
+  resetPuzzleState();
+  for (const file of files) {
+    const item = {
+      url: URL.createObjectURL(file),
+      name: file.name,
+      fit: "cover"
+    };
+    state.imageUrls.push(item);
+    const probe = new Image();
+    probe.onload = () => {
+      item.fit = probe.naturalHeight > probe.naturalWidth ? "contain" : "cover";
+      if (state.imageUrl === item.url) {
+        state.imageFit = item.fit;
+        renderPanels(BOARD_PANEL_COUNT);
+      }
+    };
+    probe.src = item.url;
+  }
+  state.slideshowIndex = 0;
+  setCurrentImage(0);
+  els.imageFileName.textContent = files.length === 1 ? files[0].name : `${files.length} images`;
   persistSettings();
   renderPanels(BOARD_PANEL_COUNT);
+  startSlideshow();
 }
 
 function resetPuzzle() {
@@ -294,29 +547,50 @@ function resetPuzzleState() {
 }
 
 function parseProblemText(text, fallbackTitle) {
-  const lines = text
+  const rawLines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"));
+    .filter((line) => line);
+  const modeLine = rawLines.find((line) => /^#\s*mode\s*=/.test(line.toLowerCase()));
+  const mode = normalizeProblemMode(modeLine ? modeLine.split("=").slice(1).join("=").trim() : "");
+  const lines = rawLines.filter((line) => !line.startsWith("#"));
   const title = lines[0] || fallbackTitle || "無題";
-  const questions = lines.slice(1).map(parseQuestionLine).filter((question) => question.answer);
-  return { title, questions };
+  const questions = lines.slice(1).map((line) => parseQuestionLine(line, mode)).filter((question) => question.answer);
+  return { title, mode, questions };
 }
 
-function parseQuestionLine(line) {
+function parseQuestionLine(line, mode = "") {
+  const effectiveMode = mode || getSelectedCommaMode();
   const comma = line.indexOf(",");
   const prompt = comma >= 0 ? line.slice(0, comma).trim() : line.trim();
   const right = comma >= 0 ? line.slice(comma + 1).trim() : "";
-  if (comma >= 0 && els.commaModeSelect.value === "answer") {
+  if (effectiveMode === "typing") {
+    const text = line.trim();
+    return { id: makeId(), prompt: text, answer: text, sub: "", raw: text, displayMode: "typing" };
+  }
+  if (comma >= 0 && effectiveMode === "answer") {
     return { id: makeId(), prompt, answer: right, sub: "答えを入力", raw: line.trim(), displayMode: "answer" };
   }
-  if (comma >= 0 && els.commaModeSelect.value === "music") {
+  if (comma >= 0 && effectiveMode === "music") {
     return { id: makeId(), prompt, answer: prompt, sub: right, raw: line.trim(), displayMode: "music" };
   }
   return { id: makeId(), prompt, answer: prompt, sub: right, raw: line.trim(), displayMode: "sub" };
 }
 
-function renderFileSelect(selected = els.fileSelect.value || "all") {
+function normalizeProblemMode(mode) {
+  const value = String(mode || "").trim().toLowerCase();
+  if (value === "quiz" || value === "answer") return "answer";
+  if (value === "music") return "music";
+  if (value === "sub") return "sub";
+  if (value === "typing") return "typing";
+  return "";
+}
+
+function getSelectedCommaMode() {
+  return els.commaModeSelect.value === "answer" ? "answer" : els.commaModeSelect.value;
+}
+
+function renderFileSelect(selected = els.fileSelect.value || state.settings.selectedFile || "all") {
   els.fileSelect.innerHTML = "";
   const allOption = new Option("全ファイル", "all");
   els.fileSelect.appendChild(allOption);
@@ -325,6 +599,12 @@ function renderFileSelect(selected = els.fileSelect.value || "all") {
   }
   els.fileSelect.value = state.files.some((file) => file.id === selected) ? selected : "all";
   persistSettings();
+}
+
+function applySelectedFileMode() {
+  const file = state.files.find((item) => item.id === els.fileSelect.value);
+  if (!file || !file.mode || file.mode === "typing") return;
+  els.commaModeSelect.value = file.mode;
 }
 
 function startGame(options = {}) {
@@ -339,8 +619,9 @@ function startGame(options = {}) {
   }
 
   const gameType = els.gameTypeSelect.value === "timeAttack" && !options.questions ? "timeAttack" : "normal";
-  const baseCount = Math.min(options.questions ? pool.length : getSelectedAttemptCount(pool.length), pool.length);
+  const baseCount = options.questions ? pool.length : (gameType === "timeAttack" ? pool.length : getSelectedAttemptCount(pool.length));
   const questions = chooseQuestions(pool, baseCount);
+  const scoreType = options.scoreType || getScoreType(gameType, questions);
   const panelCount = BOARD_PANEL_COUNT;
   const revealedPanels = getPersistedRevealedPanels();
 
@@ -348,7 +629,10 @@ function startGame(options = {}) {
     running: false,
     finished: false,
     gameType,
+    scoreType,
     title: options.title || buildStageTitle(),
+    problemSetKey: buildProblemSetKey(),
+    conditionKey: buildConditionKey(scoreType),
     questions,
     attemptCount: gameType === "timeAttack" ? Infinity : questions.length,
     displayTarget: gameType === "timeAttack" ? getAttackLimitSeconds() : questions.length,
@@ -391,6 +675,9 @@ function runCountdown() {
   els.countdownOverlay.classList.remove("hidden");
   els.countdownOverlay.classList.remove("start-word");
   els.countdownOverlay.textContent = String(value);
+  els.mobileCountdown.classList.remove("hidden");
+  els.mobileCountdown.classList.remove("start-word");
+  els.mobileCountdown.textContent = String(value);
   setFeedback("カウントダウン", "3秒後に開始", false);
 
   state.countdownId = window.setInterval(() => {
@@ -398,15 +685,20 @@ function runCountdown() {
     if (value > 0) {
       els.countdownOverlay.classList.remove("start-word");
       els.countdownOverlay.textContent = String(value);
+      els.mobileCountdown.classList.remove("start-word");
+      els.mobileCountdown.textContent = String(value);
       return;
     }
     if (value === 0) {
       els.countdownOverlay.classList.add("start-word");
       els.countdownOverlay.textContent = "START";
+      els.mobileCountdown.classList.add("start-word");
+      els.mobileCountdown.textContent = "START";
       return;
     }
     clearCountdown();
     els.countdownOverlay.classList.add("hidden");
+    els.mobileCountdown.classList.add("hidden");
     beginGameAfterCountdown();
   }, 1000);
 }
@@ -428,8 +720,18 @@ function beginGameAfterCountdown() {
 }
 
 function chooseQuestions(pool, count) {
-  const items = els.modeSelect.value === "random" ? shuffle(pool) : [...pool];
-  return items.slice(0, count).map((question) => ({ ...question, id: makeId() }));
+  if (!pool.length || !count) return [];
+  const result = [];
+  let round = 0;
+  while (result.length < count) {
+    const items = els.modeSelect.value === "random" ? shuffle(pool) : [...pool];
+    for (const question of items) {
+      if (result.length >= count) break;
+      result.push({ ...question, id: makeId(), cycle: round });
+    }
+    round += 1;
+  }
+  return result;
 }
 
 function nextQuestion() {
@@ -457,9 +759,13 @@ function nextQuestion() {
   game.lastKeyTime = 0;
   els.questionText.textContent = game.current.prompt;
   els.questionSub.textContent = game.current.sub || game.current.sourceTitle || "";
+  els.mobileQuestionText.textContent = game.current.prompt;
+  els.mobileQuestionSub.textContent = game.current.sub || game.current.sourceTitle || "";
   els.answerInput.value = "";
+  els.mobileAnswerInput.value = "";
+  applyTextLengthClasses(game.current);
   updateInputMirror();
-  els.answerInput.focus();
+  (isMobileView() ? els.mobileAnswerInput : els.answerInput).focus();
   if (game.gameType === "timeAttack") {
     updateTimeAttackTimerReadout();
   } else {
@@ -480,10 +786,39 @@ function checkAutoCorrect() {
 function updateInputMirror() {
   if (!els.inputMirror) return;
   els.inputMirror.textContent = els.answerInput.value || "";
+  if (els.mobileInputMirror) {
+    els.mobileInputMirror.textContent = els.answerInput.value || "";
+  }
+  if (document.activeElement !== els.mobileAnswerInput) {
+    els.mobileAnswerInput.value = els.answerInput.value || "";
+  }
   window.requestAnimationFrame(() => {
     els.inputMirror.scrollLeft = els.inputMirror.scrollWidth;
     els.answerInput.scrollLeft = els.answerInput.scrollWidth;
+    els.mobileInputMirror.scrollLeft = els.mobileInputMirror.scrollWidth;
+    els.mobileAnswerInput.scrollLeft = els.mobileAnswerInput.scrollWidth;
   });
+}
+
+function syncMobileInputToMain() {
+  els.answerInput.value = els.mobileAnswerInput.value;
+  updateInputMirror();
+}
+
+function applyTextLengthClasses(question) {
+  const promptLength = [...(question.prompt || "")].length;
+  const subLength = [...(question.sub || "")].length;
+  const answerLength = [...(question.answer || "")].length;
+  els.questionText.classList.toggle("long-text", promptLength >= 22);
+  els.questionText.classList.toggle("very-long-text", promptLength >= 42);
+  els.questionSub.classList.toggle("long-text", subLength >= 28);
+  els.questionSub.classList.toggle("very-long-text", subLength >= 52);
+  els.answerInput.classList.toggle("long-answer", answerLength >= 24);
+  els.answerInput.classList.toggle("very-long-answer", answerLength >= 44);
+  els.inputMirror.classList.toggle("long-answer", answerLength >= 24);
+  els.inputMirror.classList.toggle("very-long-answer", answerLength >= 44);
+  els.mobileQuestionText.classList.toggle("long-text", promptLength >= 22);
+  els.mobileQuestionText.classList.toggle("very-long-text", promptLength >= 42);
 }
 
 function judgeCurrentAnswer() {
@@ -535,6 +870,7 @@ function correctCurrentQuestion() {
   game.totalAnswerMs += answerMs;
   game.correctChars += game.current.answer.length;
   recordWordResult(game, game.current, true, answerMs);
+  showSpeedBonus(game.current.answer.length, answerMs);
   revealNextPanel();
   playCorrectSound();
   setFeedback("正解！", "パネルが開きました", false);
@@ -574,6 +910,7 @@ function startQuestionTimer() {
   const limit = getTimeLimitSeconds();
   if (!game || !limit) {
     els.timerValue.textContent = "--";
+    els.mobileTimerValue.textContent = "--";
     els.timerFill.style.width = "100%";
     return;
   }
@@ -583,6 +920,7 @@ function startQuestionTimer() {
     if (!state.game || state.game !== game || !game.running) return;
     const remaining = Math.max(0, end - performance.now());
     els.timerValue.textContent = (remaining / 1000).toFixed(1);
+    els.mobileTimerValue.textContent = (remaining / 1000).toFixed(1);
     els.timerFill.style.width = `${Math.max(0, (remaining / (limit * 1000)) * 100)}%`;
     if (remaining <= 0) {
       missCurrentQuestion("時間切れ");
@@ -612,6 +950,7 @@ function updateTimeAttackTimerReadout() {
   if (!game || game.gameType !== "timeAttack") return;
   const remaining = Math.max(0, game.attackEndTime - performance.now());
   els.timerValue.textContent = (remaining / 1000).toFixed(1);
+  els.mobileTimerValue.textContent = (remaining / 1000).toFixed(1);
   els.timerFill.style.width = `${game.attackLimitSeconds ? Math.max(0, remaining / (game.attackLimitSeconds * 1000) * 100) : 0}%`;
   const elapsed = game.attackLimitSeconds * 1000 - remaining;
   els.progressFill.style.width = `${game.attackLimitSeconds ? Math.min(100, elapsed / (game.attackLimitSeconds * 1000) * 100) : 0}%`;
@@ -633,7 +972,10 @@ function revealNextPanel() {
 
 function renderPanels(count) {
   els.panelBoard.innerHTML = "";
-  if (!count) {
+  const imageMode = getImageMode();
+  els.panelBoard.classList.toggle("wallpaper-mode", imageMode === "wallpaper");
+  els.panelBoard.classList.toggle("slideshow-mode", imageMode === "slideshow");
+  if (!count && !state.imageUrl) {
     const placeholder = document.createElement("div");
     placeholder.className = "image-placeholder";
     placeholder.textContent = "IMAGE";
@@ -650,6 +992,17 @@ function renderPanels(count) {
     els.panelBoard.appendChild(img);
   }
 
+  if (!count) return;
+  if (imageMode !== "puzzle") {
+    if (!state.imageUrl) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "image-placeholder";
+      placeholder.textContent = imageMode === "slideshow" ? "SLIDESHOW" : "WALLPAPER";
+      els.panelBoard.appendChild(placeholder);
+    }
+    return;
+  }
+
   const { cols, rows } = getGridSize(count);
   els.panelBoard.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   els.panelBoard.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
@@ -661,6 +1014,42 @@ function renderPanels(count) {
     tile.dataset.panelIndex = String(index);
     els.panelBoard.appendChild(tile);
   }
+}
+
+function setCurrentImage(index) {
+  if (!state.imageUrls.length) {
+    state.imageUrl = "";
+    state.imageName = "";
+    state.imageFit = "cover";
+    return;
+  }
+  const safeIndex = ((index % state.imageUrls.length) + state.imageUrls.length) % state.imageUrls.length;
+  const item = state.imageUrls[safeIndex];
+  state.slideshowIndex = safeIndex;
+  state.imageUrl = item.url;
+  state.imageName = item.name;
+  state.imageFit = item.fit;
+}
+
+function startSlideshow() {
+  stopSlideshow();
+  if (getImageMode() !== "slideshow" || state.imageUrls.length <= 1) return;
+  state.slideshowTimerId = window.setInterval(() => {
+    setCurrentImage(state.slideshowIndex + 1);
+    els.imageFileName.textContent = `${state.imageName} (${state.slideshowIndex + 1}/${state.imageUrls.length})`;
+    renderPanels(state.game ? state.game.panelCount : getPreviewPanelCount());
+  }, 3500);
+}
+
+function stopSlideshow() {
+  if (state.slideshowTimerId) {
+    window.clearInterval(state.slideshowTimerId);
+    state.slideshowTimerId = 0;
+  }
+}
+
+function getImageMode() {
+  return els.imageModeSelect.value || "puzzle";
 }
 
 function getGridSize(count) {
@@ -720,6 +1109,13 @@ function updateAllStats() {
   els.correctCount.textContent = stats.correctCount;
   els.missCount.textContent = stats.missCount;
   els.liveScore.textContent = formatNumber(stats.score);
+  els.mobileStageTitle.textContent = game ? game.title : buildStageTitle();
+  els.mobileCurrentIndex.textContent = displayCurrent;
+  els.mobileTargetCount.textContent = displayTarget;
+  els.mobileCorrectCount.textContent = stats.correctCount;
+  els.mobileMissCount.textContent = stats.missCount;
+  els.mobileLiveScore.textContent = formatNumber(stats.score);
+  els.mobileRankValue.textContent = stats.rank;
   if (isTimeAttack) {
     const elapsedSeconds = game.startTime ? Math.min(game.attackLimitSeconds, Math.max(0, (performance.now() - game.startTime) / 1000)) : 0;
     renderProgress(game.attackLimitSeconds, elapsedSeconds);
@@ -729,6 +1125,22 @@ function updateAllStats() {
   updateResultView(stats);
   renderMissList(game ? Array.from(game.missed.values()) : []);
   if (!game) renderPanels(getPreviewPanelCount());
+  syncMobileView();
+}
+
+function syncMobileView() {
+  const game = state.game;
+  const stats = calculateStats(game);
+  els.mobileVersion.textContent = APP_VERSION;
+  els.mobileStageTitle.textContent = game ? game.title : buildStageTitle();
+  els.mobileCorrectCount.textContent = stats.correctCount;
+  els.mobileMissCount.textContent = stats.missCount;
+  els.mobileLiveScore.textContent = formatNumber(stats.score);
+  els.mobileRankValue.textContent = stats.rank;
+  if (!game || !game.current) {
+    els.mobileQuestionText.textContent = els.questionText.textContent;
+    els.mobileQuestionSub.textContent = els.questionSub.textContent;
+  }
 }
 
 function calculateStats(game) {
@@ -750,14 +1162,17 @@ function calculateStats(game) {
   const avgKeyMs = getAverage(game.keyTimings || []);
   const keyAnalysis = buildKeyAnalysis(game.keyStats);
   const wordAnalysis = buildWordAnalysis(game.wordStats);
-  if (game.gameType === "timeAttack") {
+  const scoreType = game.scoreType || getScoreType(game.gameType);
+  if (scoreType === "timeAttack") {
     const attackMinutes = Math.max((game.attackLimitSeconds || totalSeconds || 60) / 60, 1 / 60);
     const correctPerMinute = game.correctCount / attackMinutes;
     const densityPower = Math.pow(clamp(correctPerMinute / 45, 0, 1), 1.7);
     const missPenalty = game.missCount * 260;
+    const participationBase = game.correctCount ? 300 : 0;
     const speedBonus = 7600 * accuracyRate * Math.max(speedPower, densityPower);
     const score = Math.max(0, Math.round(
-      game.correctCount * 80 +
+      participationBase +
+      game.correctCount * 95 +
       accuracyRate * 450 +
       speedBonus -
       missPenalty +
@@ -774,21 +1189,44 @@ function calculateStats(game) {
       cpm,
       score,
       scoreRate: getScoreRate(score),
+      scoreType,
       rhythmScore,
       avgKeyMs,
       keyAnalysis,
       wordAnalysis,
       comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-      rank: getRank(score)
+      rank: getRank(score, scoreType)
     };
   }
   const targetCount = Math.max(1, game.attemptCount || attempts || 1);
   const completionRate = clamp(game.correctCount / targetCount, 0, 1);
-  const missPenalty = game.missCount * 220;
-  const speedBonus = 8500 * completionRate * accuracyRate * speedPower;
+  if (scoreType === "quiz") {
+    const score = Math.max(0, Math.round(100 * completionRate));
+    return {
+      correctCount: game.correctCount,
+      missCount: game.missCount,
+      accuracy,
+      totalSeconds,
+      averageSeconds,
+      secondsPerChar,
+      wpm,
+      cpm,
+      score,
+      scoreRate: score,
+      scoreType,
+      rhythmScore,
+      avgKeyMs,
+      keyAnalysis,
+      wordAnalysis,
+      comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
+      rank: getRank(score, scoreType)
+    };
+  }
+  const missPenalty = game.missCount * 300;
+  const base = 1000 * completionRate * accuracyRate;
+  const speedBonus = 9000 * completionRate * accuracyRate * speedPower;
   const score = Math.max(0, Math.round(
-    900 * completionRate +
-    350 * accuracyRate +
+    base +
     speedBonus -
     missPenalty +
     rhythmScore
@@ -804,12 +1242,13 @@ function calculateStats(game) {
     cpm,
     score,
     scoreRate: getScoreRate(score),
+    scoreType,
     rhythmScore,
     avgKeyMs,
     keyAnalysis,
     wordAnalysis,
     comment: buildAnalysisComment(accuracyRate, averageSeconds, avgKeyMs, rhythmScore),
-    rank: getRank(score)
+    rank: getRank(score, scoreType)
   };
 }
 
@@ -825,6 +1264,7 @@ function blankStats() {
     cpm: 0,
     score: 0,
     scoreRate: 0,
+    scoreType: "typing",
     rhythmScore: 0,
     avgKeyMs: 0,
     keyAnalysis: { fast: [], slow: [] },
@@ -944,7 +1384,7 @@ function retryMissQuestions() {
   const game = state.game;
   if (!game || !game.missed.size) return;
   const questions = Array.from(game.missed.values()).map((question) => ({ ...question, id: makeId() }));
-  startGame({ questions, title: "ミス問題" });
+  startGame({ questions, title: "ミス問題", scoreType: game.scoreType });
 }
 
 async function copyMissQuestions() {
@@ -980,10 +1420,22 @@ function getMissText() {
 }
 
 function addHistory(stats, game) {
+  const scoreType = stats.scoreType || game.scoreType || getScoreType(game.gameType);
   state.history.push({
     date: new Date().toISOString(),
     title: game.title,
-    type: game.gameType === "timeAttack" ? "TA" : "通常",
+    playerName: getPlayerName(),
+    viewMode: state.viewMode,
+    type: getScoreTypeLabel(scoreType),
+    scoreType,
+    problemSetKey: game.problemSetKey || buildProblemSetKey(),
+    conditionKey: game.conditionKey || buildConditionKey(scoreType),
+    gameType: game.gameType,
+    commaMode: els.commaModeSelect.value,
+    questionCount: game.gameType === "timeAttack" ? game.attackLimitSeconds : game.attemptCount,
+    timeLimit: getTimeLimitSeconds(),
+    rhythmEnabled: game.rhythmEnabled,
+    imageMode: getImageMode(),
     total: game.gameType === "timeAttack" ? game.attackLimitSeconds : game.attemptCount,
     score: stats.score,
     scoreRate: stats.scoreRate,
@@ -993,27 +1445,56 @@ function addHistory(stats, game) {
     rank: stats.rank
   });
   state.history.sort((a, b) => b.score - a.score);
-  state.history = state.history.slice(0, 20);
+  state.history = state.history.slice(0, 200);
   localStorage.setItem(STORAGE_HISTORY, JSON.stringify(state.history));
   renderHistory();
 }
 
 function renderHistory() {
   els.rankingList.innerHTML = "";
-  if (!state.history.length) {
+  const filter = state.rankingFilter || "typing";
+  for (const button of els.rankingTabs.querySelectorAll("[data-score-type]")) {
+    button.classList.toggle("active", button.dataset.scoreType === filter);
+  }
+  const entries = state.history
+    .map((entry) => ({
+      ...entry,
+      scoreType: normalizeHistoryScoreType(entry),
+      conditionKey: entry.conditionKey || "legacy"
+    }))
+    .filter((entry) => entry.scoreType === filter)
+    .filter((entry) => !els.sameConditionToggle.checked || entry.conditionKey === buildConditionKey(filter))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+  if (!entries.length) {
     const li = document.createElement("li");
     li.className = "small-text";
-    li.textContent = "履歴なし";
+    li.textContent = els.sameConditionToggle.checked ? `${getScoreTypeLabel(filter)}の同条件履歴なし` : `${getScoreTypeLabel(filter)}の履歴なし`;
     els.rankingList.appendChild(li);
     return;
   }
-  state.history.slice(0, 20).forEach((entry, index) => {
+  entries.forEach((entry, index) => {
     const li = document.createElement("li");
     li.className = "ranking-item";
-    li.innerHTML = `<span class="ranking-rank">${index + 1}位</span><span class="ranking-type">${entry.type || "通常"}</span><span class="ranking-title">${escapeHtml(entry.title)}</span><span class="ranking-grade">${entry.rank}</span><span class="ranking-score">${formatNumber(entry.score)}</span>`;
-    li.title = `${new Date(entry.date).toLocaleString("ja-JP")} 正解:${entry.correct} ミス:${entry.miss} 時間:${formatDuration(entry.seconds)}`;
+    li.innerHTML = `<span class="ranking-rank">${index + 1}位</span><span class="ranking-type">${getScoreTypeLabel(entry.scoreType)}</span><span class="ranking-title">${escapeHtml(entry.playerName || "Guest")} / ${escapeHtml(entry.title)}</span><span class="ranking-grade">${entry.rank}</span><span class="ranking-score">${formatNumber(entry.score)}</span>`;
+    li.title = `${new Date(entry.date).toLocaleString("ja-JP")} ${entry.playerName || "Guest"} 正解:${entry.correct} ミス:${entry.miss} 時間:${formatDuration(entry.seconds)} 条件:${entry.conditionKey || "旧履歴"}`;
     els.rankingList.appendChild(li);
   });
+}
+
+function normalizeHistoryScoreType(entry) {
+  if (entry.scoreType === "quiz" || entry.scoreType === "typing" || entry.scoreType === "timeAttack") {
+    return entry.scoreType;
+  }
+  if (entry.type === "TA" || entry.type === "タイムアタック") return "timeAttack";
+  if (entry.type === "クイズ") return "quiz";
+  return "typing";
+}
+
+function getScoreTypeLabel(scoreType) {
+  if (scoreType === "quiz") return "クイズ";
+  if (scoreType === "timeAttack") return "TA";
+  return "タイピング";
 }
 
 function clearHistory() {
@@ -1037,7 +1518,7 @@ function getSelectedAttemptCount(max = getQuestionPool().length) {
   if (!max) return 0;
   const value = els.questionCountSelect.value;
   if (value === "all") return max;
-  return Math.max(0, Math.min(Number(value), max));
+  return Math.max(0, Number(value) || 0);
 }
 
 function getPreviewPanelCount() {
@@ -1055,8 +1536,39 @@ function buildStageTitle() {
   return state.files.length === 1 ? state.files[0].title : `${state.files.length}ファイル`;
 }
 
+function getPlayerName() {
+  const name = (els.playerNameInput.value || "").trim();
+  return name || "Guest";
+}
+
+function buildProblemSetKey() {
+  const selected = els.fileSelect.value;
+  const files = selected && selected !== "all"
+    ? state.files.filter((file) => file.id === selected)
+    : state.files;
+  if (!files.length) return "no-problems";
+  return files
+    .map((file) => `${file.name}:${file.title}:${file.questions.length}:${file.mode || "ui"}`)
+    .sort()
+    .join("|");
+}
+
+function buildConditionKey(scoreType = state.rankingFilter || "typing") {
+  return [
+    `score=${scoreType}`,
+    `set=${buildProblemSetKey()}`,
+    `game=${els.gameTypeSelect.value}`,
+    `comma=${els.commaModeSelect.value}`,
+    `count=${els.questionCountSelect.value}`,
+    `time=${els.noTimeLimitToggle.checked ? "none" : getTimeLimitSeconds()}`,
+    `rhythm=${els.rhythmToggle.checked ? getRhythmBpm() : "off"}`,
+    `image=${getImageMode()}`
+  ].join(";");
+}
+
 function setInputsEnabled(enabled) {
   els.answerInput.disabled = !enabled;
+  els.mobileAnswerInput.disabled = !enabled;
   els.judgeBtn.disabled = !enabled;
   els.skipBtn.disabled = !enabled;
 }
@@ -1065,6 +1577,28 @@ function setFeedback(text, sub, isMiss) {
   els.feedbackText.textContent = text;
   els.feedbackText.classList.toggle("miss", Boolean(isMiss));
   els.feedbackSub.textContent = sub || "";
+  els.mobileFeedbackText.textContent = text;
+  els.mobileFeedbackText.classList.toggle("miss", Boolean(isMiss));
+  els.mobileFeedbackSub.textContent = sub || "";
+}
+
+function showSpeedBonus(answerLength, answerMs) {
+  if (!answerLength || !answerMs) return;
+  const secondsPerChar = answerMs / answerLength / 1000;
+  const cpm = secondsPerChar ? 60 / secondsPerChar : 0;
+  const speedPower = getSpeedPower(secondsPerChar, cpm);
+  const bonus = Math.round(speedPower * Math.max(30, answerLength * 18));
+  if (bonus > 0) showScorePop(`Speed +${bonus}`, false);
+}
+
+function showScorePop(text, isMiss) {
+  if (!els.scorePop) return;
+  els.scorePop.textContent = text;
+  els.scorePop.classList.toggle("miss", Boolean(isMiss));
+  els.scorePop.classList.remove("hidden", "pop");
+  void els.scorePop.offsetWidth;
+  els.scorePop.classList.add("pop");
+  window.setTimeout(() => els.scorePop.classList.add("hidden"), 900);
 }
 
 function updateTimeLimitControls() {
@@ -1075,6 +1609,7 @@ function updateTimeLimitControls() {
   }
   const seconds = getTimeLimitSeconds();
   els.timerValue.textContent = seconds ? seconds.toFixed(1) : "--";
+  els.mobileTimerValue.textContent = seconds ? seconds.toFixed(1) : "--";
   els.timeLimitInput.disabled = els.noTimeLimitToggle.checked;
   if (!state.game || !state.game.running) {
     els.timerFill.style.width = "100%";
@@ -1102,6 +1637,7 @@ function clearCountdown() {
     window.clearInterval(state.countdownId);
     state.countdownId = 0;
   }
+  els.mobileCountdown.classList.add("hidden");
 }
 
 function clearTransitionTimer() {
@@ -1113,6 +1649,7 @@ function clearTransitionTimer() {
 
 function clearDemoTimer() {
   if (state.demoTimerId) {
+    window.clearTimeout(state.demoTimerId);
     window.clearInterval(state.demoTimerId);
     state.demoTimerId = 0;
   }
@@ -1127,6 +1664,10 @@ function startDemoTyping() {
   }
   const answer = game.current.answer || "";
   if (!answer) return;
+  if (game.rhythmEnabled) {
+    startRhythmSyncedDemoTyping(game, answer);
+    return;
+  }
   const durationMs = getDemoDurationMs(game, answer);
   const stepMs = clamp(Math.floor(durationMs / Math.max(1, answer.length)), 45, 800);
   els.demoStatus.textContent = `自動入力中 ${Math.round(durationMs / 1000 * 10) / 10}s`;
@@ -1155,6 +1696,58 @@ function startDemoTyping() {
   }, stepMs);
 }
 
+function startRhythmSyncedDemoTyping(game, answer) {
+  const beatMs = 60000 / game.rhythmBpm;
+  els.demoStatus.textContent = `リズム同期 ${game.rhythmBpm} BPM`;
+  const scheduleNext = () => {
+    if (!state.game || state.game !== game || !game.running || !game.current || !game.demoEnabled) {
+      clearDemoTimer();
+      return;
+    }
+    const current = els.answerInput.value;
+    if (current === answer) {
+      clearDemoTimer();
+      checkAutoCorrect();
+      return;
+    }
+    if (!answer.startsWith(current)) {
+      clearDemoTimer();
+      els.demoStatus.textContent = "手入力を優先";
+      return;
+    }
+    const now = performance.now();
+    const elapsed = Math.max(0, now - game.startTime);
+    const nextBeatIndex = Math.max(1, Math.floor(elapsed / beatMs) + 1);
+    const targetTime = game.startTime + nextBeatIndex * beatMs;
+    const delay = Math.max(0, targetTime - now);
+    state.demoTimerId = window.setTimeout(() => {
+      if (!state.game || state.game !== game || !game.running || !game.current || !game.demoEnabled) {
+        clearDemoTimer();
+        return;
+      }
+      const latest = els.answerInput.value;
+      if (latest === answer) {
+        clearDemoTimer();
+        checkAutoCorrect();
+        return;
+      }
+      if (!answer.startsWith(latest)) {
+        clearDemoTimer();
+        els.demoStatus.textContent = "手入力を優先";
+        return;
+      }
+      const nextChar = answer.charAt(latest.length);
+      els.answerInput.value = latest + nextChar;
+      updateInputMirror();
+      recordTypedKey(nextChar, performance.now());
+      playKeySound();
+      checkAutoCorrect();
+      scheduleNext();
+    }, delay);
+  };
+  scheduleNext();
+}
+
 function getDemoDurationMs(game, answer) {
   if (game.gameType === "timeAttack") {
     return Math.max(1200, answer.length * 140);
@@ -1176,12 +1769,14 @@ function startRhythmLoop() {
   unlockAudio();
   const interval = 60000 / game.rhythmBpm;
   els.rhythmStatus.textContent = `${game.rhythmBpm} BPM`;
+  pulseMetronome(true);
   playRhythmClick(true);
   state.rhythmTimerId = window.setInterval(() => {
     if (!state.game || state.game !== game || !game.running || !game.rhythmEnabled) {
       stopRhythmLoop();
       return;
     }
+    pulseMetronome(false);
     playRhythmClick(false);
   }, interval);
 }
@@ -1198,29 +1793,45 @@ function recordRhythmHit(game, now) {
   const beatMs = 60000 / game.rhythmBpm;
   const elapsed = Math.max(0, now - game.startTime);
   const offset = Math.abs(((elapsed + beatMs / 2) % beatMs) - beatMs / 2);
-  const perfectWindow = beatMs * 0.12;
+  const excellentWindow = beatMs * 0.1;
   const goodWindow = beatMs * 0.24;
-  if (offset <= perfectWindow) {
-    game.rhythmScore += 12;
+  if (offset <= excellentWindow) {
+    game.rhythmScore += 20;
     game.rhythmHits.perfect += 1;
-    els.rhythmStatus.textContent = `Perfect +12 (${Math.round(offset)}ms)`;
+    setRhythmJudge("Excellent", 20, offset, "excellent");
   } else if (offset <= goodWindow) {
-    game.rhythmScore += 6;
+    game.rhythmScore += 8;
     game.rhythmHits.good += 1;
-    els.rhythmStatus.textContent = `Good +6 (${Math.round(offset)}ms)`;
+    setRhythmJudge("Good", 8, offset, "good");
   } else {
     game.rhythmHits.miss += 1;
-    els.rhythmStatus.textContent = `ずれ ${Math.round(offset)}ms`;
+    setRhythmJudge("NG", 0, offset, "ng");
   }
+}
+
+function pulseMetronome(accent) {
+  els.metronomeLight.classList.remove("beat", "accent");
+  void els.metronomeLight.offsetWidth;
+  els.metronomeLight.classList.add("beat");
+  if (accent) els.metronomeLight.classList.add("accent");
+}
+
+function setRhythmJudge(label, points, offset, className) {
+  els.rhythmJudge.textContent = points ? `${label} +${points}` : label;
+  els.rhythmJudge.className = className;
+  els.rhythmStatus.textContent = `${label} ${points ? `+${points}` : "+0"} (${Math.round(offset)}ms)`;
+  showScorePop(points ? `${label} +${points}` : "NG +0", className === "ng");
 }
 
 function persistSettings() {
   state.settings = {
     selectedFile: els.fileSelect.value,
+    playerName: getPlayerName(),
     gameType: els.gameTypeSelect.value,
     questionCount: els.questionCountSelect.value,
     mode: els.modeSelect.value,
     commaMode: els.commaModeSelect.value,
+    imageMode: getImageMode(),
     timeLimitSeconds: els.timeLimitInput.value,
     noTimeLimit: els.noTimeLimitToggle.checked,
     volume: els.volumeInput.value,
@@ -1239,9 +1850,11 @@ function persistSettings() {
 function applySettings() {
   const settings = state.settings;
   els.gameTypeSelect.value = settings.gameType || "normal";
+  els.playerNameInput.value = settings.playerName || "";
   els.questionCountSelect.value = settings.questionCount || "20";
   els.modeSelect.value = settings.mode || "random";
   els.commaModeSelect.value = settings.commaMode || "answer";
+  els.imageModeSelect.value = settings.imageMode || "puzzle";
   els.timeLimitInput.value = settings.timeLimitSeconds || settings.customTime || settings.timeLimit || "10";
   els.noTimeLimitToggle.checked = settings.noTimeLimit || settings.timeLimit === "none";
   els.volumeInput.value = settings.volume || "0.35";
@@ -1316,7 +1929,13 @@ function playTone(frequency, duration, type, gainScale, delay = 0) {
   oscillator.stop(start + duration + 0.02);
 }
 
-function getRank(score) {
+function getRank(score, scoreType = "typing") {
+  if (scoreType === "quiz") {
+    if (score >= 100) return "S";
+    if (score >= 80) return "A";
+    if (score >= 60) return "B";
+    return "C";
+  }
   if (score >= 8500) return "S";
   if (score >= 6000) return "A";
   if (score >= 3000) return "B";
@@ -1346,8 +1965,14 @@ function getScoreRate(score) {
   return clamp(score / 100, 0, 100);
 }
 
+function getScoreType(gameType, questions = []) {
+  if (gameType === "timeAttack") return "timeAttack";
+  if (questions.length) return questions.every((question) => question.displayMode === "answer") ? "quiz" : "typing";
+  return els.commaModeSelect.value === "answer" ? "quiz" : "typing";
+}
+
 function getRhythmBpm() {
-  return clamp(Math.floor(Number(els.rhythmBpmInput.value) || 100), 40, 240);
+  return clamp(Math.floor(Number(els.rhythmBpmInput.value) || 100), 40, 300);
 }
 
 function clamp(value, min, max) {
